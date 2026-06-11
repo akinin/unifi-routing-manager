@@ -4,7 +4,7 @@
 
 ## 🎯 Возможности
 
-- 🔄 Автоматическое переключение между WireGuard туннелями (failover)
+- 🔄 Автоматическое переключение между WireGuard туннелями (Failover)
 - 🌍 Маршрутизация UniFi Cloud сервисов через WireGuard
 - 📦 Маршрутизация обновлений прошивок через WireGuard
 - 📊 Интерактивный менеджер с мониторингом
@@ -18,7 +18,7 @@
 │   ├── ubnt-cloud-routes.sh       # Скрипт маршрутизации Cloud
 │   ├── wg-map.conf                # Карта WireGuard туннелей
 │   ├── domains.txt                # Домены для маршрутизации
-│   ├── addresses.txt              # IP адреса (авто-заполняется)
+│   ├── addresses.txt              # IP адреса (авто-заполнение)
 │   ├── networks.txt               # Сети для маршрутизации
 │   ├── active-table               # Активная таблица маршрутизации
 │   ├── active-iface               # Активный интерфейс
@@ -28,9 +28,8 @@
 ├── ubnt-updates/
 │   ├── ubnt-updates-routes.sh     # Скрипт маршрутизации Updates
 │   ├── wg-map.conf                # Карта WireGuard туннелей
-│   ├── domains.txt                # Домены для маршрутизации
-│   ├── addresses.txt              # IP адреса (авто-заполняется)
-│   ├── networks.txt               # Сети для маршрутизации
+│   ├── addresses.txt              # IP адреса (авто-заполнение)
+│   ├── update-domains.txt         # Домены для обновлений
 │   ├── active-table               # Активная таблица маршрутизации
 │   ├── active-iface               # Активный интерфейс
 │   ├── active-name                # Имя активного туннеля
@@ -80,11 +79,32 @@ touch /persistent/ubnt-updates/active-table
 
 ## ⚙️ Конфигурация
 
+### WireGuard интерфейсы
+
+Перед настройкой убедитесь, что WireGuard туннели созданы и работают:
+
+```bash
+# Показать WireGuard интерфейсы с их таблицами и IP
+echo "# Формат: table interface name"
+ip rule show | grep -oP 'from \d+\.\d+\.\d+\.\d+ lookup \K\d+\.wgclt\d+' | while read entry; do
+  table=$(echo $entry | cut -d. -f1)
+  iface=$(echo $entry | cut -d. -f2)
+  ip=$(ip -br addr show $iface 2>/dev/null | awk '{print $3}')
+  printf "%-3s %-10s %-15s WG-NAME\n" "$table" "$iface" "$ip"
+done
+```
+Пример вывода:
+```bash
+# Формат: table interface name
+001 wgclt4     172.16.6.2/32   WG-NAME
+180 wgclt7     10.5.0.3/32     WG-NAME
+178 wgclt8     10.6.0.3/32     WG-NAME
+002 wgclt9     10.7.0.3/32     WG-NAME
+```
+> 💡 Используйте эти данные для создания `wg-map.conf`, просто замените `WG-NAME` на понятные названия (например, WG-DE, WG-NL).
+
+
 #### wg-map.conf
-
-Формат: 
-
-`table interface name`
 
 Пример:
 
@@ -263,6 +283,12 @@ systemctl start ubnt-cloud-routes.service
 ## 🔍 Диагностика
 Проверка маршрутов:
 ```bash
+# Проверить доступность через туннель
+ping -I wgclt7 8.8.8.8
+
+# Проверить внешний IP через туннель
+curl --interface wgclt7 ifconfig.me
+
 # Посмотреть активные маршруты в таблице 180
 ip route show table 180
 
@@ -275,6 +301,7 @@ nslookup shard.id.ui.com
 # Проверить адреса в файле
 cat /persistent/ubnt-cloud/addresses.txt
 ```
+
 Логи:
 ```bash
 # Логи скриптов (если запущены вручную)
