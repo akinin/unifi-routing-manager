@@ -49,7 +49,7 @@
 
 ```bash
 cd /persistent
-git clone [https://git.akinin.su/akininav/unifi-routing-manager.git](https://github.com/akinin/unifi-routing-manager.git)
+git clone https://github.com/akinin/unifi-routing-manager.git
 cd unifi-routing-manager
 ```
 
