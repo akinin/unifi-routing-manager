@@ -258,4 +258,5 @@ systemctl restart ubnt-updates-routes.service
 
 ### 🐛 Известные проблемы
 После перезагрузки UDM маршруты не сохраняются автоматически
+
 Решение: используйте systemd таймеры с `OnBootSec=2min`
