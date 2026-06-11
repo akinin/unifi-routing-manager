@@ -11,6 +11,8 @@
 - 🔍 Определение геолокации и провайдера внешних IP
 - ⏱️ Автообновление AWS сетей для UniFi Cloud по расписанию (Systemd интеграция)
 
+![UniFi Routing Manager](URM.png)
+
 ## 📁 Структура проекта
 ```bash
 /persistent/
