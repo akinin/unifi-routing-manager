@@ -28,7 +28,6 @@
 ├── ubnt-updates/
 │   ├── ubnt-updates-routes.sh     # Скрипт маршрутизации Updates
 │   ├── wg-map.conf                # Карта WireGuard туннелей
-│   ├── addresses.txt              # IP адреса (авто-заполнение)
 │   ├── update-domains.txt         # Домены для обновлений
 │   ├── active-table               # Активная таблица маршрутизации
 │   ├── active-iface               # Активный интерфейс
@@ -71,7 +70,6 @@ touch /persistent/ubnt-cloud/active-iface
 touch /persistent/ubnt-cloud/active-name
 touch /persistent/ubnt-cloud/active-table
 
-touch /persistent/ubnt-updates/addresses.txt
 touch /persistent/ubnt-updates/active-iface
 touch /persistent/ubnt-updates/active-name
 touch /persistent/ubnt-updates/active-table
@@ -331,7 +329,7 @@ systemctl restart ubnt-updates-routes.service
 - Маршруты добавляются в отдельные таблицы маршрутизации (180, 181, и т.д.)
 - При наличии нескольких WireGuard туннелей используется round-robin балансировка
 - Логи ротируются автоматически (последние 1000 строк)
-- Файлы `addresses.txt` генерируются автоматически и не должны редактироваться вручную
+- Файл `addresses.txt` (только для ubnt-cloud) генерируется автоматически и не должен редактироваться вручную
 
 ## 🐛 Известные проблемы
 После перезагрузки UDM маршруты не сохраняются автоматически
