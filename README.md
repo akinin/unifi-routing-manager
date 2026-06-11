@@ -12,7 +12,7 @@
 - **Автообновление AWS сетей** для UniFi Cloud
 
 ## 📁 Структура проекта
-
+```bash
 unifi-routing-project/
 ├── unifi-routing-manager.sh          # Интерактивный менеджер
 ├── ubnt-cloud/                       # UniFi Cloud маршрутизация
@@ -25,8 +25,7 @@ unifi-routing-project/
 ├── ubnt-updates-routes.sh        # Основной скрипт
 ├── update-domains.txt            # Список доменов Updates
 └── wg-map.conf                   # Карта WireGuard туннелей
-
-Копировать
+```
 
 ## 🚀 Установка
 
@@ -36,8 +35,10 @@ unifi-routing-project/
 cd /persistent
 git clone https://git.akinin.su/akininav/unifi-routing-manager.git
 cd unifi-routing-manager
-2. Скопировать файлы в рабочие директории
-Копировать
+```
+
+### 2. Скопировать файлы в рабочие директории
+```bash
 # Скопировать проекты
 cp -r ubnt-cloud /persistent/
 cp -r ubnt-updates /persistent/
@@ -49,8 +50,10 @@ cp unifi-routing-manager.sh /persistent/
 chmod +x /persistent/unifi-routing-manager.sh
 chmod +x /persistent/ubnt-cloud/*.sh
 chmod +x /persistent/ubnt-updates/*.sh
-3. Создать пустые файлы для динамических данных
-Копировать
+```
+
+### 3. Создать пустые файлы для динамических данных
+```bash
 touch /persistent/ubnt-cloud/addresses.txt
 touch /persistent/ubnt-cloud/active-iface
 touch /persistent/ubnt-cloud/active-name
@@ -60,54 +63,86 @@ touch /persistent/ubnt-updates/addresses.txt
 touch /persistent/ubnt-updates/active-iface
 touch /persistent/ubnt-updates/active-name
 touch /persistent/ubnt-updates/active-table
-⚙️ Конфигурация
-wg-map.conf
-Формат: table interface name
+```
+
+### ⚙️ Конфигурация
+
+#### wg-map.conf
+
+Формат: `table interface name`
 
 Пример:
 
-Копировать
+```bash
 180 wgclt7 WG-DE
 181 wgclt8 WG-NL
-table - номер таблицы маршрутизации (180, 181, и т.д.)
-interface - имя WireGuard интерфейса (wgclt7, wgclt8)
-name - понятное имя для отображения (WG-DE, WG-NL)
-domains.txt (UniFi Cloud)
+...
+```
+- table - номер таблицы маршрутизации (180, 181, и т.д.)
+- interface - имя WireGuard интерфейса (wgclt7, wgclt8)
+- name - понятное имя для отображения (WG-DE, WG-NL)
+
+#### domains.txt (UniFi Cloud)
 Список доменов для маршрутизации через WireGuard:
 
-Копировать
-shard.id.ui.com
-device-airos.uicdn.com
-fw-update.ubnt.com
-...
-update-domains.txt (UniFi Updates)
+```bash
+a1ewuiz2p7wdvw-ats.iot.us-west-2.amazonaws.com
+c3sdnuexugkg7e.credentials.iot.us-west-2.amazonaws.com
+cloudaccess.svc.ubnt.com
+cloudaccess.svc.ui.com
+device-api-pxy.svc.ui.com
+nca-iot-us-west-2.svc.ui.com
+unifi.ui.com
+protect.ui.com
+account.ui.com
+sso.ui.com
+api.ui.com
+trace.svc.ui.com
+remote-access.svc.ui.com
+device.svc.ui.com
+console.ui.com
+static.ui.com
+assets.ui.com
+```
+
+#### update-domains.txt (UniFi Updates)
 Список доменов для обновлений прошивок:
 
-Копировать
+```bash
 fw-download.ubnt.com
 fw-update.ubnt.com
-...
-networks.txt (UniFi Cloud)
+fw-update.ui.com
+apt.artifacts.ui.com
+apt-release-candidate.artifacts.ui.com
+apt-beta.artifacts.ui.com
+```
+
+#### networks.txt (UniFi Cloud)
 Статические сети в формате CIDR:
 
-Копировать
+```bash
 3.33.236.0/22
 18.64.0.0/14
 52.94.76.0/22
 ...
-📋 Использование
+```
+
+### 📋 Использование
 Интерактивный режим
-Копировать
+```bash
 /persistent/unifi-routing-manager.sh
+```
 Меню позволяет:
 
-Управлять проектами (Cloud/Updates)
-Запускать/останавливать маршрутизацию
-Просматривать статус
-Управлять systemd сервисами и таймерами
-Обновлять конфигурации
+- Управлять проектами (Cloud/Updates)
+- Запускать/останавливать маршрутизацию
+- Просматривать статус
+- Управлять systemd сервисами и таймерами
+- Обновлять конфигурации
+
 Ручной запуск
-Копировать
+
+```bash
 # UniFi Cloud
 /persistent/ubnt-cloud/ubnt-cloud-routes.sh
 
@@ -116,18 +151,21 @@ networks.txt (UniFi Cloud)
 
 # Обновить AWS сети
 /persistent/ubnt-cloud/update-aws-networks.sh
-🔄 Systemd интеграция
-Создание сервисов
+```
+
+### 🔄 Systemd интеграция
+##### Создание сервисов
 Через интерактивное меню:
 
-Выберите проект (Cloud или Updates)
-Выберите "Manage systemd service"
-Выберите "Create/Update service"
+1. Выберите проект (Cloud или Updates)
+1. Выберите "Manage systemd service"
+1. Выберите "Create/Update service"
+
 Или вручную создайте файлы:
 
-UniFi Cloud Service (/etc/systemd/system/ubnt-cloud-routes.service):
+UniFi Cloud Service (`/etc/systemd/system/ubnt-cloud-routes.service`):
 
-Копировать
+```bash
 [Unit]
 Description=UniFi Cloud Routes via WireGuard
 After=network-online.target
@@ -141,9 +179,10 @@ StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
-UniFi Cloud Timer (/etc/systemd/system/ubnt-cloud-routes.timer):
+```
+UniFi Cloud Timer (`/etc/systemd/system/ubnt-cloud-routes.timer`):
 
-Копировать
+```bash
 [Unit]
 Description=Update UniFi Cloud routes every 30 minutes
 
@@ -154,8 +193,9 @@ AccuracySec=1min
 
 [Install]
 WantedBy=timers.target
+```
 Управление сервисами
-Копировать
+```bash
 # Включить и запустить таймер
 systemctl enable ubnt-cloud-routes.timer
 systemctl start ubnt-cloud-routes.timer
@@ -169,9 +209,10 @@ journalctl -u ubnt-cloud-routes.service -f
 
 # Вручную запустить сервис
 systemctl start ubnt-cloud-routes.service
-🔍 Диагностика
+```
+### 🔍 Диагностика
 Проверка маршрутов
-Копировать
+```bash
 # Посмотреть активные маршруты в таблице 180
 ip route show table 180
 
@@ -183,8 +224,9 @@ nslookup shard.id.ui.com
 
 # Проверить адреса в файле
 cat /persistent/ubnt-cloud/addresses.txt
+```
 Логи
-Копировать
+```bash
 # Логи скриптов (если запущены вручную)
 tail -f /persistent/ubnt-cloud/ubnt-cloud-routes.log
 tail -f /persistent/ubnt-updates/ubnt-updates-routes.log
@@ -192,8 +234,9 @@ tail -f /persistent/ubnt-updates/ubnt-updates-routes.log
 # Логи systemd сервисов
 journalctl -u ubnt-cloud-routes.service -n 50
 journalctl -u ubnt-updates-routes.service -n 50
-🛠️ Обновление
-Копировать
+```
+### 🛠️ Обновление
+```bash
 cd /persistent/unifi-routing-manager
 git pull
 
@@ -205,12 +248,14 @@ cp unifi-routing-manager.sh /persistent/
 # Перезапустить сервисы (если используются)
 systemctl restart ubnt-cloud-routes.service
 systemctl restart ubnt-updates-routes.service
-📝 Примечания
-Скрипты используют dig для резолва доменов
-Маршруты добавляются в отдельные таблицы маршрутизации (180, 181, и т.д.)
-При наличии нескольких WireGuard туннелей используется round-robin балансировка
-Логи ротируются автоматически (последние 1000 строк)
-Файлы addresses.txt генерируются автоматически и не должны редактироваться вручную
-🐛 Известные проблемы
+```
+### 📝 Примечания
+- Скрипты используют `dig` для резолва доменов
+- Маршруты добавляются в отдельные таблицы маршрутизации (180, 181, и т.д.)
+- При наличии нескольких WireGuard туннелей используется round-robin балансировка
+- Логи ротируются автоматически (последние 1000 строк)
+- Файлы `addresses.txt` генерируются автоматически и не должны редактироваться вручную
+
+### 🐛 Известные проблемы
 После перезагрузки UDM маршруты не сохраняются автоматически
-Решение: используйте systemd таймеры с OnBootSec=2min
+Решение: используйте systemd таймеры с `OnBootSec=2min`
