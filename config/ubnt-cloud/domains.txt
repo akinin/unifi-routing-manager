@@ -1,0 +1,18 @@
+# UniFi / Ubiquiti Cloud domains (WITHOUT updates/firmware)
+a1ewuiz2p7wdvw-ats.iot.us-west-2.amazonaws.com
+c3sdnuexugkg7e.credentials.iot.us-west-2.amazonaws.com
+cloudaccess.svc.ubnt.com
+cloudaccess.svc.ui.com
+device-api-pxy.svc.ui.com
+nca-iot-us-west-2.svc.ui.com
+unifi.ui.com
+protect.ui.com
+account.ui.com
+sso.ui.com
+api.ui.com
+trace.svc.ui.com
+remote-access.svc.ui.com
+device.svc.ui.com
+console.ui.com
+static.ui.com
+assets.ui.com

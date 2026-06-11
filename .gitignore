@@ -1,0 +1,17 @@
+# Логи
+*.log
+
+# Временные файлы
+*.tmp
+*.swp
+*~
+*.bak.*
+
+# Динамически генерируемые файлы
+addresses.txt
+active-*
+networks-aws-generated.txt
+
+# Backup файлы
+*.tar.gz
+*.backup
