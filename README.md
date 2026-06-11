@@ -1,15 +1,18 @@
 # UniFi Routing Manager
 
-Система управления маршрутизацией для UniFi Dream Machine (UDM), позволяющая направлять трафик UniFi Cloud и Updates через WireGuard туннели.
+**Система управления маршрутизацией для UniFi Dream Machine (UDM), позволяющая направлять трафик UniFi Cloud и Updates через WireGuard туннели.**
+
+> Применимо именно к UDM, т.к. policy based routes распространяются только на **устройства** подключенные к UDM.
+Для владельцев Unifi Cloud Key данный метод излишен.
 
 ## 🎯 Возможности
 
 - 🔄 Автоматическое переключение между WireGuard туннелями (Failover)
-- 🌍 Маршрутизация UniFi Cloud сервисов через WireGuard
-- 📦 Маршрутизация обновлений прошивок через WireGuard
+- 🌍 Маршрутизация облачных сервисов (UI Cloud) через WireGuard
+- 📦 Маршрутизация обновлений прошивок (UI Update) через WireGuard
 - 📊 Интерактивный менеджер с мониторингом
 - 🔍 Определение геолокации и провайдера внешних IP
-- ⏱️ Автообновление AWS сетей для UniFi Cloud по расписанию (Systemd интеграция)
+- ⏱️ Автообновление AWS сетей для UI Cloud по расписанию (Systemd интеграция)
 
 ![UniFi Routing Manager](URM.png)
 
@@ -17,7 +20,7 @@
 ```bash
 /persistent/
 ├── ubnt-cloud/
-│   ├── ubnt-cloud-routes.sh       # Скрипт маршрутизации Cloud
+│   ├── ubnt-cloud-routes.sh       # Скрипт маршрутизации UI Cloud
 │   ├── wg-map.conf                # Карта WireGuard туннелей
 │   ├── domains.txt                # Домены для маршрутизации
 │   ├── addresses.txt              # IP адреса (авто-заполнение)
@@ -28,7 +31,7 @@
 │   └── ubnt-cloud-routes.log      # Лог работы
 │
 ├── ubnt-updates/
-│   ├── ubnt-updates-routes.sh     # Скрипт маршрутизации Updates
+│   ├── ubnt-updates-routes.sh     # Скрипт маршрутизации UI Updates
 │   ├── wg-map.conf                # Карта WireGuard туннелей
 │   ├── update-domains.txt         # Домены для обновлений
 │   ├── active-table               # Активная таблица маршрутизации
@@ -113,9 +116,9 @@ done
 181 wgclt8 WG-NL
 ...
 ```
-- table - номер таблицы маршрутизации (180, 181, и т.д.)
-- interface - имя WireGuard интерфейса (wgclt7, wgclt8)
-- name - понятное имя для отображения (WG-DE, WG-NL)
+- (180, 181, и т.д.) - номер таблицы маршрутизации
+- (wgclt7, wgclt8) - имя WireGuard интерфейса
+- (WG-DE, WG-NL) - понятное имя для отображения (WG-DE, WG-NL)
 
 #### domains.txt (UniFi Cloud)
 Список доменов для маршрутизации через WireGuard:
@@ -162,7 +165,7 @@ apt-beta.artifacts.ui.com
 ...
 ```
 
-### Создать alias для быстрого запуска
+### Создайте alias для быстрого запуска
 ```bash
 # Добавить alias в .bashrc
 cat >> ~/.bashrc <<'EOF'
@@ -175,7 +178,7 @@ EOF
 source ~/.bashrc
 ```
 
-### Дополнительные команды для ~/.bashrc
+### Можно использовать дополнительные команды для ~/.bashrc
 ```bash
 cat >> ~/.bashrc <<'EOF'
 
