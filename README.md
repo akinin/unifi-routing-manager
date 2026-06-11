@@ -4,27 +4,40 @@
 
 ## 🎯 Возможности
 
-- **Интерактивное управление** через меню
-- **Автоматическая маршрутизация** UniFi Cloud через WireGuard
-- **Маршрутизация Updates** для прошивок устройств
-- **Systemd интеграция** с таймерами для автоматического обновления
-- **Поддержка нескольких WireGuard туннелей** с балансировкой
-- **Автообновление AWS сетей** для UniFi Cloud
+- 🔄 Автоматическое переключение между WireGuard туннелями (failover)
+- 🌍 Маршрутизация UniFi Cloud сервисов через WireGuard
+- 📦 Маршрутизация обновлений прошивок через WireGuard
+- 📊 Интерактивный менеджер с мониторингом
+- 🔍 Определение геолокации и провайдера внешних IP
+- ⏱️ Автообновление AWS сетей для UniFi Cloud по расписанию (Systemd интеграция)
 
 ## 📁 Структура проекта
 ```bash
-unifi-routing-project/
-├── unifi-routing-manager.sh          # Интерактивный менеджер
-├── ubnt-cloud/                       # UniFi Cloud маршрутизация
-│   ├── ubnt-cloud-routes.sh          # Основной скрипт
-│   ├── domains.txt                   # Список доменов Cloud
-│   ├── networks.txt                  # Статические сети (AWS и др.)
-│   ├── wg-map.conf                   # Карта WireGuard туннелей
-│   └── update-aws-networks.sh        # Обновление AWS сетей
-└── ubnt-updates/                     # UniFi Updates маршрутизация
-├── ubnt-updates-routes.sh        # Основной скрипт
-├── update-domains.txt            # Список доменов Updates
-└── wg-map.conf                   # Карта WireGuard туннелей
+/persistent/
+├── ubnt-cloud/
+│   ├── ubnt-cloud-routes.sh       # Скрипт маршрутизации Cloud
+│   ├── wg-map.conf                # Карта WireGuard туннелей
+│   ├── domains.txt                # Домены для маршрутизации
+│   ├── addresses.txt              # IP адреса (авто-заполняется)
+│   ├── networks.txt               # Сети для маршрутизации
+│   ├── active-table               # Активная таблица маршрутизации
+│   ├── active-iface               # Активный интерфейс
+│   ├── active-name                # Имя активного туннеля
+│   └── ubnt-cloud-routes.log      # Лог работы
+│
+├── ubnt-updates/
+│   ├── ubnt-updates-routes.sh     # Скрипт маршрутизации Updates
+│   ├── wg-map.conf                # Карта WireGuard туннелей
+│   ├── domains.txt                # Домены для маршрутизации
+│   ├── addresses.txt              # IP адреса (авто-заполняется)
+│   ├── networks.txt               # Сети для маршрутизации
+│   ├── active-table               # Активная таблица маршрутизации
+│   ├── active-iface               # Активный интерфейс
+│   ├── active-name                # Имя активного туннеля
+│   └── ubnt-updates-routes.log    # Лог работы
+│
+└── unifi-routing-manager.sh       # Интерактивный менеджер
+
 ```
 
 ## 🚀 Установка
@@ -65,11 +78,13 @@ touch /persistent/ubnt-updates/active-name
 touch /persistent/ubnt-updates/active-table
 ```
 
-### ⚙️ Конфигурация
+## ⚙️ Конфигурация
 
 #### wg-map.conf
 
-Формат: `table interface name`
+Формат: 
+
+`table interface name`
 
 Пример:
 
@@ -127,8 +142,43 @@ apt-beta.artifacts.ui.com
 ...
 ```
 
-### 📋 Использование
-Интерактивный режим
+### Создать alias для быстрого запуска
+```bash
+# Добавить alias в .bashrc
+cat >> ~/.bashrc <<'EOF'
+
+# UniFi Routing Manager
+alias urm='/persistent/unifi-routing-manager.sh'
+alias unifi-routing='/persistent/unifi-routing-manager.sh'
+EOF
+
+source ~/.bashrc
+```
+
+### Дополнительные команды для ~/.bashrc
+```bash
+cat >> ~/.bashrc <<'EOF'
+
+# UniFi Routing quick commands
+alias urm-status='systemctl status ubnt-cloud-routes.timer ubnt-updates-routes.timer --no-pager'
+alias urm-logs-cloud='tail -f /persistent/ubnt-cloud/ubnt-cloud-routes.log'
+alias urm-logs-updates='tail -f /persistent/ubnt-updates/ubnt-updates-routes.log'
+alias urm-rules='echo "Cloud (100):"; ip rule show | grep "^100:" | grep wgclt | wc -l; echo "Updates (110):"; ip rule show | grep "^110:" | grep wgclt | wc -l'
+EOF
+
+source ~/.bashrc
+```
+
+- `urm` — запустить менеджер
+- `urm-status` — статус systemd
+- `urm-logs-cloud` — логи Cloud в реальном времени
+- `urm-logs-updates` — логи Updates в реальном времени
+- `urm-rules` — количество правил
+
+
+
+## 📋 Использование
+Интерактивный режим:
 ```bash
 /persistent/unifi-routing-manager.sh
 ```
@@ -140,7 +190,7 @@ apt-beta.artifacts.ui.com
 - Управлять systemd сервисами и таймерами
 - Обновлять конфигурации
 
-Ручной запуск
+Ручной запуск:
 
 ```bash
 # UniFi Cloud
@@ -153,17 +203,17 @@ apt-beta.artifacts.ui.com
 /persistent/ubnt-cloud/update-aws-networks.sh
 ```
 
-### 🔄 Systemd интеграция
-##### Создание сервисов
-Через интерактивное меню:
+## 🔄 Systemd интеграция
+#### Создание сервисов
+**Через интерактивное меню:**
 
 1. Выберите проект (Cloud или Updates)
 1. Выберите "Manage systemd service"
 1. Выберите "Create/Update service"
 
-Или вручную создайте файлы:
+**Ручное создание файлов:**
 
-UniFi Cloud Service (`/etc/systemd/system/ubnt-cloud-routes.service`):
+UniFi Cloud Service (`/etc/systemd/system/ubnt-cloud-routes.service`)
 
 ```bash
 [Unit]
@@ -194,7 +244,7 @@ AccuracySec=1min
 [Install]
 WantedBy=timers.target
 ```
-Управление сервисами
+Управление сервисами:
 ```bash
 # Включить и запустить таймер
 systemctl enable ubnt-cloud-routes.timer
@@ -210,8 +260,8 @@ journalctl -u ubnt-cloud-routes.service -f
 # Вручную запустить сервис
 systemctl start ubnt-cloud-routes.service
 ```
-### 🔍 Диагностика
-Проверка маршрутов
+## 🔍 Диагностика
+Проверка маршрутов:
 ```bash
 # Посмотреть активные маршруты в таблице 180
 ip route show table 180
@@ -225,7 +275,7 @@ nslookup shard.id.ui.com
 # Проверить адреса в файле
 cat /persistent/ubnt-cloud/addresses.txt
 ```
-Логи
+Логи:
 ```bash
 # Логи скриптов (если запущены вручную)
 tail -f /persistent/ubnt-cloud/ubnt-cloud-routes.log
@@ -235,7 +285,7 @@ tail -f /persistent/ubnt-updates/ubnt-updates-routes.log
 journalctl -u ubnt-cloud-routes.service -n 50
 journalctl -u ubnt-updates-routes.service -n 50
 ```
-### 🛠️ Обновление
+## 🛠️ Обновление
 ```bash
 cd /persistent/unifi-routing-manager
 git pull
@@ -249,14 +299,14 @@ cp unifi-routing-manager.sh /persistent/
 systemctl restart ubnt-cloud-routes.service
 systemctl restart ubnt-updates-routes.service
 ```
-### 📝 Примечания
+## 📝 Примечания
 - Скрипты используют `dig` для резолва доменов
 - Маршруты добавляются в отдельные таблицы маршрутизации (180, 181, и т.д.)
 - При наличии нескольких WireGuard туннелей используется round-robin балансировка
 - Логи ротируются автоматически (последние 1000 строк)
 - Файлы `addresses.txt` генерируются автоматически и не должны редактироваться вручную
 
-### 🐛 Известные проблемы
+## 🐛 Известные проблемы
 После перезагрузки UDM маршруты не сохраняются автоматически
 
 Решение: используйте systemd таймеры с `OnBootSec=2min`
