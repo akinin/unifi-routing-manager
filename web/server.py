@@ -376,10 +376,12 @@ def ensure_country_flag(country_code):
 
 
 def provider_icon_filename(isp="", asn=""):
-    base = f"{asn}_101x101.png" if asn else f"{slugify(isp)}_101x101.png"
-    path = ISP_ICONS["dir"] / base
-    if path.exists():
-        return base
+    if asn:
+        base = f"{asn}_101x101.png"
+        path = ISP_ICONS["dir"] / base
+        marker = path.with_suffix(path.suffix + ".source")
+        if path.exists() and marker.exists() and marker.read_text(encoding="utf-8", errors="ignore").strip() == "2ip":
+            return base
     slug_path = ISP_ICONS["dir"] / f"{slugify(isp)}_101x101.png"
     if slug_path.exists():
         return slug_path.name
@@ -391,14 +393,19 @@ def provider_icon_url(filename):
 
 
 def ensure_provider_icon(isp="", asn=""):
+    if asn:
+        filename = f"{asn}_101x101.png"
+        path = ISP_ICONS["dir"] / filename
+        marker = path.with_suffix(path.suffix + ".source")
+        if marker.exists() and marker.read_text(encoding="utf-8", errors="ignore").strip() == "2ip" and path.exists():
+            return filename
+        ok, _ = download_url(f"https://static.2ip.io/asn_favicons/{asn}.png", path)
+        if ok:
+            marker.write_text("2ip\n", encoding="utf-8")
+            return filename
     filename = provider_icon_filename(isp, asn)
     if filename:
         return filename
-    if asn:
-        filename = f"{asn}_101x101.png"
-        ok, _ = download_url(f"https://static.2ip.io/asn_favicons/{asn}.png", ISP_ICONS["dir"] / filename)
-        if ok:
-            return filename
     filename = f"{slugify(isp)}_101x101.png"
     path = ISP_ICONS["dir"] / filename
     if not path.exists() and isp not in ("N/A", "Unknown"):
@@ -556,15 +563,20 @@ def generate_provider_icons(connections=None):
         isp = item.get("isp") or item.get("label") or "Provider"
         if isp in ("N/A", "Unknown"):
             continue
-        filenames = []
         if item.get("asn"):
-            filenames.append(f"{item['asn']}_101x101.png")
-        filenames.append(f"{slugify(isp)}_101x101.png")
-        for filename in sorted(set(filenames)):
+            filename = f"{item['asn']}_101x101.png"
             path = ISP_ICONS["dir"] / filename
-            if not path.exists():
-                path.write_bytes(generated_icon_png(isp))
+            marker = path.with_suffix(path.suffix + ".source")
+            ok, _ = download_url(f"https://static.2ip.io/asn_favicons/{item['asn']}.png", path)
+            if ok:
+                marker.write_text("2ip\n", encoding="utf-8")
                 created.append(filename)
+                continue
+        filename = f"{slugify(isp)}_101x101.png"
+        path = ISP_ICONS["dir"] / filename
+        if not path.exists():
+            path.write_bytes(generated_icon_png(isp))
+            created.append(filename)
     return created
 
 

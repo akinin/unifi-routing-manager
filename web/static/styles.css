@@ -320,6 +320,13 @@ textarea {
   overflow: hidden;
 }
 
+.ops-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
 .panel-head {
   padding: 18px;
   border-bottom: 1px solid var(--line-soft);
@@ -446,6 +453,11 @@ body.dark .connection.header {
   box-shadow: inset 3px 0 0 var(--blue);
 }
 
+body.dark .connection.active {
+  background: #172231;
+  box-shadow: inset 3px 0 0 #2d79c7;
+}
+
 .connection-title {
   display: flex;
   align-items: center;
@@ -484,6 +496,11 @@ body.dark .connection.header {
   margin-right: 5px;
 }
 
+body.dark .active-pill {
+  background: #173327;
+  color: #76d6a5;
+}
+
 .inline-media {
   display: inline-flex;
   align-items: center;
@@ -510,6 +527,33 @@ body.dark .connection.header {
   padding: 16px 18px;
   display: grid;
   gap: 8px;
+}
+
+.list-block {
+  padding: 16px 18px;
+}
+
+.list-block .list-head {
+  padding: 0 0 10px;
+}
+
+.compact-list {
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.logs-actions {
+  margin-left: auto;
 }
 
 .list code {
@@ -541,6 +585,10 @@ body.dark .connection.header {
   padding: 8px;
 }
 
+body.dark .isp-icon-item {
+  background: #171f2b;
+}
+
 .isp-icon-item img {
   width: 36px;
   height: 36px;
@@ -548,6 +596,10 @@ body.dark .connection.header {
   object-fit: contain;
   background: #fff;
   border: 1px solid var(--line-soft);
+}
+
+body.dark .isp-icon-item img {
+  background: #111824;
 }
 
 .isp-icon-item span {
@@ -597,6 +649,11 @@ body.dark .connection.header {
   white-space: nowrap;
 }
 
+body.dark .badge {
+  background: #202b39;
+  color: var(--muted);
+}
+
 .badge-dot {
   width: 6px;
   height: 6px;
@@ -610,14 +667,29 @@ body.dark .connection.header {
   color: var(--green);
 }
 
+body.dark .badge.ok {
+  background: #173327;
+  color: #76d6a5;
+}
+
 .badge.warn {
   background: #fff5df;
   color: var(--amber);
 }
 
+body.dark .badge.warn {
+  background: #342813;
+  color: #d6aa52;
+}
+
 .badge.bad {
   background: #ffecec;
   color: var(--red);
+}
+
+body.dark .badge.bad {
+  background: #3a2024;
+  color: #e58a94;
 }
 
 pre {
@@ -805,6 +877,7 @@ input {
 
   .metrics,
   .grid,
+  .ops-grid,
   .editor-grid,
   .kv,
   .connection,
@@ -838,6 +911,7 @@ input {
 
   .metrics,
   .grid,
+  .ops-grid,
   .editor-grid,
   .kv,
   .connection,

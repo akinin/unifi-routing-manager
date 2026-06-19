@@ -25,6 +25,8 @@ const inlineIcons = {
   edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4 11.5-11.5Z"/></svg>',
   moon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a7 7 0 1 0 11 11Z"/></svg>',
   sun: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>',
+  chevronDown: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
+  chevronUp: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>',
   route: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 18.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path d="M17.5 10.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path d="M9 16h3.5c2.2 0 4-1.8 4-4v-1.5"/></svg>',
   dns: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7.5h14"/><path d="M5 12h14"/><path d="M5 16.5h14"/><path d="M7 4.5h10c1.1 0 2 .9 2 2v11c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2v-11c0-1.1.9-2 2-2Z"/></svg>',
   refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.2 9A7 7 0 0 0 6.5 7.2L4 10"/><path d="M5.8 15A7 7 0 0 0 17.5 16.8L20 14"/></svg>',
@@ -331,6 +333,14 @@ function renderThemeButton() {
   button.setAttribute("aria-label", button.title);
 }
 
+function renderLogToggle() {
+  const button = $("#toggleLogs");
+  const expanded = !$("#logBox").hidden;
+  button.innerHTML = icon(expanded ? "chevronUp" : "chevronDown");
+  button.title = expanded ? "Collapse logs" : "Expand logs";
+  button.setAttribute("aria-label", button.title);
+}
+
 function enhanceButtons() {
   const actionIcons = {
     "dnscrypt.update": "refresh",
@@ -486,10 +496,11 @@ $("#autoRefresh").addEventListener("change", () => {
 $("#toggleLogs").addEventListener("click", () => {
   const box = $("#logBox");
   box.hidden = !box.hidden;
-  $("#toggleLogs").textContent = box.hidden ? "Expand" : "Collapse";
+  renderLogToggle();
 });
 if (localStorage.getItem("theme") === "dark") document.body.classList.add("dark");
 renderThemeButton();
+renderLogToggle();
 enhanceButtons();
 
 checkAuth().then((ok) => ok && refresh()).catch((error) => {
