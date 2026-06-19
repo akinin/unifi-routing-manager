@@ -5,6 +5,7 @@ import sys
 import subprocess
 import time
 import re
+import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -57,6 +58,8 @@ ISP_ICONS = {
 }
 
 WEB_SERVICE = "unifi-routing-web.service"
+NET_CACHE = {}
+NET_CACHE_LOCK = threading.Lock()
 
 
 def read_text(path, default=""):
@@ -95,8 +98,8 @@ def human_event(line):
     message = match.group(2) if match else line.strip()
 
     replacements = [
-        (r"^=== done UniFi Cloud WG routing via (.+?) / (.+?) ===$", r"Cloud routing updated via \1, table \2"),
-        (r"^=== done UniFi Updates WG routing via (.+?) / (.+?) ===$", r"Update routing refreshed via \1, table \2"),
+        (r"^=== done UniFi Cloud WG routing via (.+?) / (.+?) ===$", r"Cloud routing via \1"),
+        (r"^=== done UniFi Updates WG routing via (.+?) / (.+?) ===$", r"Update routing via \1"),
         (r"^=== start UniFi Cloud WG routing ===$", "Cloud routing update started"),
         (r"^=== start UniFi Updates WG routing ===$", "Update routing refresh started"),
         (r"^selected WG table=(.+?) iface=(.+?) name=(.+?)$", r"Selected WireGuard tunnel \3 on \2"),
@@ -138,6 +141,103 @@ def run(command, timeout=20):
         return {"ok": False, "code": 127, "output": f"Command not found: {command[0]}"}
     except subprocess.TimeoutExpired:
         return {"ok": False, "code": 124, "output": "Command timed out"}
+
+
+def cached_value(key, ttl, producer):
+    now = time.time()
+    with NET_CACHE_LOCK:
+        cached = NET_CACHE.get(key)
+        if cached and now - cached["time"] < ttl:
+            return cached["value"]
+
+    value = producer()
+    with NET_CACHE_LOCK:
+        NET_CACHE[key] = {"time": now, "value": value}
+    return value
+
+
+def external_ip(iface=None):
+    key = f"external-ip:{iface or 'direct'}"
+
+    def produce():
+        command = ["curl", "-4", "--connect-timeout", "3", "-sS"]
+        if iface:
+            command.extend(["--interface", iface])
+        command.append("https://ifconfig.me")
+        result = run(command, timeout=6)
+        value = result["output"].splitlines()[0].strip() if result["ok"] and result["output"] else "N/A"
+        return value if re.match(r"^\d+\.\d+\.\d+\.\d+$", value) else "N/A"
+
+    return cached_value(key, 300, produce)
+
+
+def ip_geo(ip):
+    key = f"ip-geo:{ip}"
+
+    def produce():
+        if not ip or ip == "N/A":
+            return {"country": "N/A", "countryCode": "N/A", "isp": "N/A"}
+
+        result = run(
+            ["curl", "--connect-timeout", "3", "-sS", f"http://ip-api.com/json/{ip}?fields=country,countryCode,isp"],
+            timeout=6,
+        )
+        if not result["ok"] or not result["output"]:
+            return {"country": "Unknown", "countryCode": "Unknown", "isp": "Unknown"}
+
+        try:
+            data = json.loads(result["output"])
+        except json.JSONDecodeError:
+            return {"country": "Unknown", "countryCode": "Unknown", "isp": "Unknown"}
+
+        return {
+            "country": data.get("country") or "Unknown",
+            "countryCode": data.get("countryCode") or "Unknown",
+            "isp": data.get("isp") or "Unknown",
+        }
+
+    return cached_value(key, 3600, produce)
+
+
+def connection_status(label, iface=None, active_for=None):
+    ip = external_ip(iface)
+    geo = ip_geo(ip)
+    return {
+        "label": label,
+        "iface": iface or "",
+        "ip": ip,
+        "country": geo["country"],
+        "countryCode": geo["countryCode"],
+        "isp": geo["isp"],
+        "activeFor": active_for or [],
+        "active": bool(active_for),
+    }
+
+
+def wireguard_interfaces():
+    result = run(["sh", "-lc", "command -v wg >/dev/null 2>&1 && wg show interfaces || true"], timeout=8)
+    if not result["ok"] or not result["output"]:
+        return []
+    return [item for item in result["output"].split() if item]
+
+
+def connections_status(projects):
+    active_by_iface = {}
+    for project in projects:
+        iface = project.get("activeIface")
+        if iface and iface not in ("unknown", "not configured"):
+            active_by_iface.setdefault(iface, []).append(project["title"].replace("UniFi ", ""))
+
+    connections = [connection_status("Direct", active_for=[])]
+    for iface in wireguard_interfaces():
+        active_for = active_by_iface.get(iface, [])
+        label = iface
+        for project in projects:
+            if project.get("activeIface") == iface and project.get("activeName") not in ("unknown", "not configured"):
+                label = project["activeName"]
+                break
+        connections.append(connection_status(label, iface=iface, active_for=active_for))
+    return connections
 
 
 def systemctl(*args):
@@ -234,6 +334,7 @@ def isp_icons_status():
 
 
 def status_payload():
+    projects = [project_status(key, config) for key, config in PROJECTS.items()]
     return {
         "root": str(ROOT),
         "host": HOST,
@@ -243,7 +344,8 @@ def status_payload():
             "enabled": systemctl_value("is-enabled", WEB_SERVICE),
         },
         "generatedAt": int(time.time()),
-        "projects": [project_status(key, config) for key, config in PROJECTS.items()],
+        "projects": projects,
+        "connections": connections_status(projects),
         "dnscrypt": dnscrypt_status(),
         "ispIcons": isp_icons_status(),
     }

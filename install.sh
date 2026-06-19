@@ -120,8 +120,40 @@ install_web_service() {
     /bin/sh "$PROJECT_ROOT/web/install-service.sh"
 }
 
+install_cli_shortcuts() {
+  require_file "$PROJECT_ROOT/unifi-routing-manager.sh"
+
+  cat > /usr/bin/urm <<EOF
+#!/bin/sh
+exec /bin/sh "$PROJECT_ROOT/unifi-routing-manager.sh" "\$@"
+EOF
+  chmod 755 /usr/bin/urm
+
+  cat > /usr/bin/unifi-routing <<EOF
+#!/bin/sh
+exec /bin/sh "$PROJECT_ROOT/unifi-routing-manager.sh" "\$@"
+EOF
+  chmod 755 /usr/bin/unifi-routing
+}
+
+install_shared_wg_map() {
+  shared_map="/persistent/wg-map.conf"
+  [ -f "$shared_map" ] && return 0
+
+  if [ -f "$PROJECT_ROOT/ubnt-cloud/wg-map.conf" ]; then
+    cp "$PROJECT_ROOT/ubnt-cloud/wg-map.conf" "$shared_map"
+  elif [ -f "$PROJECT_ROOT/ubnt-updates/wg-map.conf" ]; then
+    cp "$PROJECT_ROOT/ubnt-updates/wg-map.conf" "$shared_map"
+  else
+    touch "$shared_map"
+  fi
+
+  chmod 644 "$shared_map"
+}
+
 require_root
 require_file "$PROJECT_ROOT/web/install-service.sh"
+install_shared_wg_map
 
 install_routing_timer \
   "ubnt-cloud-routes" \
@@ -140,6 +172,7 @@ install_routing_timer \
 install_dnscrypt_timer
 install_isp_icons_service
 install_web_service
+install_cli_shortcuts
 
 systemctl daemon-reload
 systemctl start ubnt-cloud-routes.service || true

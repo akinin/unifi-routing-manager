@@ -2,7 +2,9 @@
 
 BASE="/persistent/ubnt-cloud"
 
-MAP="$BASE/wg-map.conf"
+COMMON_MAP="/persistent/wg-map.conf"
+MAP="${UNIFI_WG_MAP:-$COMMON_MAP}"
+[ -f "$MAP" ] || MAP="$BASE/wg-map.conf"
 DOMAINS_FILE="$BASE/domains.txt"
 ADDRESSES_FILE="$BASE/addresses.txt"
 NETWORKS_FILE="$BASE/networks.txt"

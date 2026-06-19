@@ -2,6 +2,8 @@ __pycache__/
 *.py[cod]
 .DS_Store
 .codex-paramiko/
+codex-paramiko-deps/
+codex-asyncssh-deps/
 .push-worktree-*/
 
 *.log

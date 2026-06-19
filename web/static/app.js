@@ -28,7 +28,8 @@ function icon(name) {
     return `<span class="icon">${inlineIcons[name]}</span>`;
   }
   const src = icons[name] || icons.unifi;
-  return `<span class="icon"><img src="${src}" alt="" loading="lazy"></span>`;
+  const brandClass = ["unifi", "unifiOs", "unifiNetwork", "ubiquiti", "image"].includes(name) ? " brand-mark" : "";
+  return `<span class="icon${brandClass}"><img src="${src}" alt="" loading="lazy"></span>`;
 }
 
 function actionButton(action, label, iconName, danger = false) {
@@ -76,6 +77,34 @@ function renderMetrics(data) {
   ]
     .map(([iconName, label, value]) => `<article class="metric">${icon(iconName)}<div><span>${label}</span><strong>${escapeHtml(value)}</strong></div></article>`)
     .join("");
+}
+
+function renderConnections(data) {
+  const connections = data.connections || [];
+  $("#connectionsList").innerHTML = connections.length
+    ? connections
+        .map((item) => {
+          const active = item.active ? `<span class="active-pill">${escapeHtml(item.activeFor.join(" + "))}</span>` : "";
+          const title = item.iface
+            ? `${escapeHtml(item.label)} <span>${escapeHtml(item.iface)}</span>`
+            : escapeHtml(item.label);
+          const country = item.countryCode && item.countryCode !== "Unknown"
+            ? `${escapeHtml(item.countryCode)} · ${escapeHtml(item.country)}`
+            : escapeHtml(item.country || "Unknown");
+          return `
+            <article class="connection ${item.active ? "active" : ""}">
+              <div class="connection-title">
+                ${icon(item.iface ? "wireguard" : "route")}
+                <div><strong>${title}</strong>${active}</div>
+              </div>
+              <div><span>IP</span><strong>${escapeHtml(item.ip)}</strong></div>
+              <div><span>Country</span><strong>${country}</strong></div>
+              <div><span>Provider</span><strong>${escapeHtml(item.isp)}</strong></div>
+            </article>
+          `;
+        })
+        .join("")
+    : `<p class="empty">No connection data.</p>`;
 }
 
 function readableFileLabel(label) {
@@ -141,6 +170,7 @@ function renderStatus(data) {
   const address = data.host === "0.0.0.0" ? `LAN access on port ${data.port}` : `${data.host}:${data.port}`;
   $("#rootPath").textContent = `${address} · root ${data.root}`;
   renderMetrics(data);
+  renderConnections(data);
   $("#projects").innerHTML = data.projects.map(renderProject).join("");
 
   $("#dnscryptStatus").innerHTML = `

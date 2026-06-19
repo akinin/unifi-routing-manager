@@ -69,8 +69,7 @@ chmod +x /persistent/ubnt-isp-icons/install-systemd-wrapper.sh
 Настройте WireGuard-карты для Cloud и Updates:
 
 ```sh
-vi /persistent/ubnt-cloud/wg-map.conf
-vi /persistent/ubnt-updates/wg-map.conf
+vi /persistent/wg-map.conf
 ```
 
 Формат строки:
@@ -87,6 +86,8 @@ vi /persistent/ubnt-updates/wg-map.conf
 ```
 
 Скрипты идут сверху вниз и выбирают первый туннель, у которого есть интерфейс, default route в указанной таблице и успешный ping через интерфейс.
+
+Для совместимости старые файлы `/persistent/ubnt-cloud/wg-map.conf` и `/persistent/ubnt-updates/wg-map.conf` всё ещё поддерживаются как fallback, но основной файл теперь общий: `/persistent/wg-map.conf`.
 
 Запустите установку:
 
@@ -225,6 +226,12 @@ git pull
 ```
 
 После обновления установщик безопасно перезапишет unit-файлы systemd, перечитает конфигурацию и перезапустит Web UI. Пользовательские списки доменов, сетей, WireGuard-карты и логи не удаляются.
+
+## Данные и структура
+
+Проект пока сохраняет совместимую структуру `/persistent/ubnt-cloud`, `/persistent/ubnt-updates`, `/persistent/ubnt-dnscrypt`, `/persistent/ubnt-isp-icons` и `/persistent/web`, потому что эти пути уже используются systemd-службами и текущими логами. Общая WireGuard-карта вынесена в `/persistent/wg-map.conf`, чтобы не дублировать один и тот же список туннелей.
+
+Если нужен полный переезд в один каталог, например `/persistent/unifi-route-manager`, делайте его отдельной миграцией с symlink-совместимостью для старых путей.
 
 ## Диагностика
 

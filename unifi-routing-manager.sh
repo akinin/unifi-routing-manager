@@ -14,6 +14,10 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 BOLD='\033[1m'
 
+clear_screen() {
+  clear 2>/dev/null || true
+}
+
 # Пути к проектам
 CLOUD_DIR="/persistent/ubnt-cloud"
 UPDATES_DIR="/persistent/ubnt-updates"
@@ -231,7 +235,7 @@ show_dnscrypt_status() {
   local dnscrypt_status
   local last_run
 
-  dnscrypt_status=$(systemctl is-active dnscrypt-proxy 2>/dev/null)
+  dnscrypt_status=$(systemctl is-active dnscrypt-proxy 2>/dev/null || true)
   [ -z "$dnscrypt_status" ] && dnscrypt_status="inactive"
 
   [ -f "$DNSCRYPT_DIR/domains.txt" ] && \
@@ -554,7 +558,7 @@ manage_project() {
   local priority=$3
   
   while true; do
-    clear
+    clear_screen
     print_header
     show_project_status "$project" "$dir" "$priority"
     
@@ -589,7 +593,7 @@ manage_project() {
 # Функция для управления DNSCrypt
 manage_dnscrypt() {
   while true; do
-    clear
+    clear_screen
     print_header
     show_dnscrypt_status
 
@@ -610,35 +614,35 @@ manage_dnscrypt() {
 
     case $action in
       1)
-        clear; print_header
+        clear_screen; print_header
         echo -e "${BOLD}Running full update...${NC}"; echo ""
         sh "$DNSCRYPT_DIR/ubnt-dnscrypt.sh" update
         echo ""; echo -e "${GREEN}✓ Done${NC}"; echo ""
         read -p "Press Enter to continue..."
         ;;
       2)
-        clear; print_header
+        clear_screen; print_header
         echo -e "${BOLD}Extracting domains...${NC}"; echo ""
         sh "$DNSCRYPT_DIR/ubnt-dnscrypt.sh" extract
         echo ""; echo -e "${GREEN}✓ Done${NC}"; echo ""
         read -p "Press Enter to continue..."
         ;;
       3)
-        clear; print_header
+        clear_screen; print_header
         echo -e "${BOLD}Generating forwarding rules...${NC}"; echo ""
         sh "$DNSCRYPT_DIR/ubnt-dnscrypt.sh" generate
         echo ""; echo -e "${GREEN}✓ Done${NC}"; echo ""
         read -p "Press Enter to continue..."
         ;;
       4)
-        clear; print_header
+        clear_screen; print_header
         echo -e "${BOLD}Restarting dnscrypt-proxy...${NC}"; echo ""
         sh "$DNSCRYPT_DIR/ubnt-dnscrypt.sh" restart
         echo ""; echo -e "${GREEN}✓ Done${NC}"; echo ""
         read -p "Press Enter to continue..."
         ;;
       5)
-        clear; print_header
+        clear_screen; print_header
         echo -e "${BOLD}$DNSCRYPT_DIR/domains.txt:${NC}"; echo ""
         if [ -f "$DNSCRYPT_DIR/domains.txt" ]; then
           cat "$DNSCRYPT_DIR/domains.txt" | sed 's/^/  /'
@@ -648,7 +652,7 @@ manage_dnscrypt() {
         echo ""; read -p "Press Enter to continue..."
         ;;
       6)
-        clear; print_header
+        clear_screen; print_header
         echo -e "${BOLD}/run/dnscrypt-forwarding.txt:${NC}"; echo ""
         if [ -f "/run/dnscrypt-forwarding.txt" ]; then
           cat "/run/dnscrypt-forwarding.txt" | sed 's/^/  /'
@@ -658,7 +662,7 @@ manage_dnscrypt() {
         echo ""; read -p "Press Enter to continue..."
         ;;
       7)
-        clear; print_header
+        clear_screen; print_header
         echo -e "${BOLD}Logs for UBNT-DNSCRYPT (last 50 lines):${NC}"; echo ""
         if [ -f "$DNSCRYPT_DIR/ubnt-dnscrypt.log" ]; then
           tail -50 "$DNSCRYPT_DIR/ubnt-dnscrypt.log"
@@ -668,7 +672,7 @@ manage_dnscrypt() {
         echo ""; read -p "Press Enter to continue..."
         ;;
       8)
-        clear; print_header
+        clear_screen; print_header
         echo -e "${BOLD}Logs for UBNT-DNSCRYPT (last 200 lines):${NC}"; echo ""
         if [ -f "$DNSCRYPT_DIR/ubnt-dnscrypt.log" ]; then
           tail -200 "$DNSCRYPT_DIR/ubnt-dnscrypt.log"
@@ -686,7 +690,7 @@ manage_dnscrypt() {
 # Функция для управления ISP icons
 manage_isp_icons() {
   while true; do
-    clear
+    clear_screen
     print_header
     show_isp_icons_status
 
@@ -702,14 +706,14 @@ manage_isp_icons() {
 
     case $action in
       1)
-        clear; print_header
+        clear_screen; print_header
         echo -e "${BOLD}Installing ISP icons...${NC}"; echo ""
         sh "$ISP_ICONS_DIR/install.sh"
         echo ""; echo -e "${GREEN}✓ Done${NC}"; echo ""
         read -p "Press Enter to continue..."
         ;;
       2)
-        clear; print_header
+        clear_screen; print_header
         echo -e "${BOLD}Logs for UBNT-ISP-ICONS (last 50 lines):${NC}"; echo ""
         if [ -f "$ISP_ICONS_DIR/systemd-install.log" ]; then
           tail -50 "$ISP_ICONS_DIR/systemd-install.log"
@@ -719,7 +723,7 @@ manage_isp_icons() {
         echo ""; read -p "Press Enter to continue..."
         ;;
       3)
-        clear; print_header
+        clear_screen; print_header
         echo -e "${BOLD}Logs for UBNT-ISP-ICONS (last 200 lines):${NC}"; echo ""
         if [ -f "$ISP_ICONS_DIR/systemd-install.log" ]; then
           tail -200 "$ISP_ICONS_DIR/systemd-install.log"
@@ -824,7 +828,7 @@ start_all() {
 # Главное меню
 main_menu() {
   while true; do
-    clear
+    clear_screen
     show_status
 
     echo ""
@@ -850,7 +854,7 @@ main_menu() {
       6) stop_all ;;
       7) create_backup ;;
       0)
-        clear
+        clear_screen
         echo -e "${GREEN}Goodbye!${NC}"
         exit 0
         ;;
