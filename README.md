@@ -153,6 +153,7 @@ DNSCrypt:
 
 - `/persistent/ubnt-dnscrypt/domains.txt` генерируется из Cloud и Updates доменов.
 - `/run/dnscrypt-forwarding.txt` создаётся для `dnscrypt-proxy`.
+- Web UI считает DNSCrypt активным, когда forwarding rules успешно сгенерированы; отдельный `dnscrypt-proxy` unit на UDM может не выглядеть как постоянно активный сервис.
 
 ## Обновление AWS сетей
 

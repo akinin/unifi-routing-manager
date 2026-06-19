@@ -144,7 +144,7 @@ function renderStatus(data) {
   $("#projects").innerHTML = data.projects.map(renderProject).join("");
 
   $("#dnscryptStatus").innerHTML = `
-    <div><span>Service</span><strong>${badge(data.dnscrypt.service)}</strong></div>
+    <div><span>Forwarding state</span><strong>${badge(data.dnscrypt.service)}</strong></div>
     <div><span>Domains</span><strong>${escapeHtml(data.dnscrypt.domains)}</strong></div>
     <div><span>Forwarding</span><strong>${escapeHtml(data.dnscrypt.forwarding)}</strong></div>
     <div><span>Last activity</span><strong class="event-compact">${eventLine(data.dnscrypt.lastEvent, data.dnscrypt.lastLog)}</strong></div>

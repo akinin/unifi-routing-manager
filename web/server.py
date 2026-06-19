@@ -203,10 +203,15 @@ def project_status(key, config):
 def dnscrypt_status():
     base = DNSCRYPT["dir"]
     forwarding = Path("/run/dnscrypt-forwarding.txt")
+    proxy_service = systemctl_value("is-active", "dnscrypt-proxy")
+    domains = len(list_entries(base / "domains.txt"))
+    forwarding_rules = len(list_entries(forwarding))
+    service = "active" if proxy_service == "active" or forwarding_rules > 0 else proxy_service
     return {
-        "service": systemctl_value("is-active", "dnscrypt-proxy"),
-        "domains": len(list_entries(base / "domains.txt")),
-        "forwarding": len(list_entries(forwarding)),
+        "service": service,
+        "proxyService": proxy_service,
+        "domains": domains,
+        "forwarding": forwarding_rules,
         "lastLog": tail(base / DNSCRYPT["log"], 1),
         "lastEvent": human_event(tail(base / DNSCRYPT["log"], 1)),
     }
