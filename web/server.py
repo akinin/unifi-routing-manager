@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, urlparse
 
 
 APP_DIR = Path(__file__).resolve().parent
+PROJECT_HOME = APP_DIR.parent
 ROOT = Path(os.environ.get("UNIFI_ROUTING_ROOT", "/persistent")).resolve()
 HOST = os.environ.get("UNIFI_WEB_HOST", "0.0.0.0")
 PORT = int(os.environ.get("UNIFI_WEB_PORT", "8090"))
@@ -70,8 +71,8 @@ ISP_ICONS = {
 WEB_SERVICE = "unifi-routing-web.service"
 NET_CACHE = {}
 NET_CACHE_LOCK = threading.Lock()
-AUTH_FILE = ROOT / "urm-auth.json"
-AVATAR_DIR = ROOT / "web-data"
+AUTH_FILE = PROJECT_HOME / "urm-auth.json"
+AVATAR_DIR = PROJECT_HOME / "web-data"
 SESSION_TTL = 86400
 EDITABLE_FILES = {
     "cloud.domains": ROOT / "ubnt-cloud" / "domains.txt",

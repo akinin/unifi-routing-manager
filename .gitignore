@@ -4,6 +4,7 @@ __pycache__/
 .codex-paramiko/
 codex-paramiko-deps/
 codex-asyncssh-deps/
+ssh-runtime-deps/
 .push-worktree-*/
 
 *.log
