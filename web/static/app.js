@@ -23,6 +23,8 @@ const inlineIcons = {
   update: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10"/><path d="m8 10 4 4 4-4"/><path d="M5 18h14"/></svg>',
   download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>',
   edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4 11.5-11.5Z"/></svg>',
+  imagePlus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5z"/><path d="m5 15 4-4 3 3 2-2 5 5"/><path d="M16 4v6"/><path d="M13 7h6"/></svg>',
+  flag: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4"/><path d="M5 5h11l-1 4 1 4H5"/></svg>',
   moon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a7 7 0 1 0 11 11Z"/></svg>',
   sun: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>',
   chevronDown: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
@@ -66,6 +68,7 @@ const editorLabels = {
   "cloud.domains": "Cloud domains",
   "cloud.networks": "Cloud manual networks",
   "updates.domains": "Updates domains",
+  "updates.networks": "Updates manual networks",
   "wg.map": "WireGuard map",
 };
 
@@ -167,6 +170,7 @@ function editorKeyFor(projectKey, label) {
   if (projectKey === "cloud" && label === "domains") return "cloud.domains";
   if (projectKey === "cloud" && label === "networks") return "cloud.networks";
   if (projectKey === "updates" && label === "domains") return "updates.domains";
+  if (projectKey === "updates" && label === "networks") return "updates.networks";
   return "";
 }
 
@@ -247,8 +251,6 @@ function renderStatus(data) {
   $("#iconsStatus").innerHTML = `
     <div><span>Directory</span><strong>${badge(data.ispIcons.exists ? "configured" : "not configured")}</strong></div>
     <div><span>Icons</span><strong>${escapeHtml(data.ispIcons.icons)}</strong></div>
-    <div><span>ASN install path</span><strong>${escapeHtml(data.ispIcons.installAsnPath)}</strong></div>
-    <div><span>Name install path</span><strong>${escapeHtml(data.ispIcons.installNamePath)}</strong></div>
     <div><span>Last activity</span><strong class="event-compact">${eventLine(data.ispIcons.lastEvent, data.ispIcons.lastLog)}</strong></div>
   `;
   $("#iconsList").innerHTML = (data.ispIcons.items || [])
@@ -362,6 +364,11 @@ function enhanceButtons() {
   document.querySelectorAll("button[data-open-editor].icon-button").forEach((button) => {
     if (button.querySelector(".icon")) return;
     button.innerHTML = icon("edit");
+  });
+
+  document.querySelectorAll("button[data-open-download].icon-button").forEach((button) => {
+    if (button.querySelector(".icon")) return;
+    button.innerHTML = icon(button.dataset.openDownload === "country" ? "flag" : "imagePlus");
   });
 
   const refreshBtn = $("#refreshBtn");

@@ -48,7 +48,7 @@ PROJECTS = {
         "log": "ubnt-updates-routes.log",
         "files": {
             "domains": "update-domains.txt",
-            "networks": "networks.txt",
+            "networks": "networks-manual.txt",
             "addresses": "addresses.txt",
         },
     },
@@ -78,6 +78,7 @@ EDITABLE_FILES = {
     "cloud.domains": ROOT / "ubnt-cloud" / "domains.txt",
     "cloud.networks": ROOT / "ubnt-cloud" / "networks-manual.txt",
     "updates.domains": ROOT / "ubnt-updates" / "update-domains.txt",
+    "updates.networks": ROOT / "ubnt-updates" / "networks-manual.txt",
     "wg.map": ROOT / "wg-map.conf",
 }
 
@@ -686,8 +687,6 @@ def isp_icons_status():
         pass
     return {
         "directory": str(base),
-        "installAsnPath": ISP_ICONS["asn_dir"],
-        "installNamePath": ISP_ICONS["name_dir"],
         "exists": base.exists(),
         "icons": len(icons),
         "items": [{"name": name, "url": provider_icon_url(name)} for name in icons],

@@ -9,6 +9,7 @@ MAP="${UNIFI_WG_MAP:-$COMMON_MAP}"
 [ -f "$MAP" ] || MAP="$BASE/wg-map.conf"
 DOMAINS_FILE="$BASE/update-domains.txt"
 NETWORKS_FILE="$BASE/networks.txt"
+MANUAL_NETWORKS_FILE="$BASE/networks-manual.txt"
 ADDRESSES_FILE="$BASE/addresses.txt"
 
 ACTIVE_TABLE_FILE="$BASE/active-table"
@@ -46,6 +47,7 @@ ensure_files() {
   [ -f "$MAP" ] || touch "$MAP"
   [ -f "$DOMAINS_FILE" ] || touch "$DOMAINS_FILE"
   [ -f "$NETWORKS_FILE" ] || touch "$NETWORKS_FILE"
+  [ -f "$MANUAL_NETWORKS_FILE" ] || touch "$MANUAL_NETWORKS_FILE"
   [ -f "$ADDRESSES_FILE" ] || touch "$ADDRESSES_FILE"
   [ -f "$LOG" ] || touch "$LOG"
 }
@@ -132,9 +134,12 @@ apply_cdn_networks() {
   table="$1"
 
   log "apply CDN networks via $table"
-  echo "$CDN_NETWORKS" | sed '/^[[:space:]]*$/d' | sort -u > "$NETWORKS_FILE"
+  {
+    echo "$CDN_NETWORKS" | sed '/^[[:space:]]*$/d'
+    list_entries "$MANUAL_NETWORKS_FILE"
+  } | sort -u > "$NETWORKS_FILE"
 
-  echo "$CDN_NETWORKS" | sed '/^[[:space:]]*$/d' | while read -r net; do
+  list_entries "$NETWORKS_FILE" | while read -r net; do
     is_cidr4 "$net" || {
       log "skip invalid network: $net"
       continue

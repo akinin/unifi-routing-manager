@@ -91,15 +91,22 @@
               <p>Local icon patch state.</p>
             </div>
             <div class="actions">
-              <button data-open-download="provider">Add provider</button>
-              <button data-open-download="country">Add flag</button>
               <button data-action="icons.discover">Discover</button>
               <button data-action="icons.install">Install</button>
               <button class="danger" data-action="icons.uninstall">Uninstall</button>
             </div>
           </div>
           <div class="kv" id="iconsStatus"></div>
-          <div class="icon-gallery" id="iconsList"></div>
+          <div class="list-block icons-block">
+            <div class="list-head">
+              <h3>Icons</h3>
+              <div class="actions compact-actions">
+                <button class="icon-button" data-open-download="provider" type="button" title="Add provider" aria-label="Add provider"></button>
+                <button class="icon-button" data-open-download="country" type="button" title="Add flag" aria-label="Add flag"></button>
+              </div>
+            </div>
+            <div class="icon-gallery" id="iconsList"></div>
+          </div>
         </section>
       </section>
 
@@ -125,6 +132,11 @@
             <div><h3>Updates domains</h3><p data-editor-path="updates.domains"></p></div>
             <textarea data-editor="updates.domains" spellcheck="false"></textarea>
             <button data-save-editor="updates.domains">Save</button>
+          </article>
+          <article class="editor-card">
+            <div><h3>Updates manual networks</h3><p data-editor-path="updates.networks"></p></div>
+            <textarea data-editor="updates.networks" spellcheck="false"></textarea>
+            <button data-save-editor="updates.networks">Save</button>
           </article>
           <article class="editor-card">
             <div><h3>WireGuard map</h3><p data-editor-path="wg.map"></p></div>
