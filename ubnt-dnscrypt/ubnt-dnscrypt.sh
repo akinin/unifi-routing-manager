@@ -1,8 +1,9 @@
 #!/bin/sh
 
-BASE="/persistent/ubnt-dnscrypt"
-CLOUD_DIR="/persistent/ubnt-cloud"
-UPDATES_DIR="/persistent/ubnt-updates"
+BASE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+PROJECT_ROOT="$(CDPATH= cd -- "$BASE/.." && pwd)"
+CLOUD_DIR="$PROJECT_ROOT/ubnt-cloud"
+UPDATES_DIR="$PROJECT_ROOT/ubnt-updates"
 
 DOMAINS_FILE="$BASE/domains.txt"
 FORWARDING_FILE="/run/dnscrypt-forwarding.txt"

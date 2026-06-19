@@ -43,11 +43,14 @@ body {
 
 .sidebar {
   min-height: 100vh;
+  height: 100vh;
   background: var(--panel);
   border-right: 1px solid var(--line);
   padding: 22px 16px;
   position: sticky;
   top: 0;
+  align-self: start;
+  overflow-y: auto;
 }
 
 .brand {
@@ -101,8 +104,14 @@ nav a {
 
 nav a:hover,
 nav a.active {
-  color: var(--blue);
-  background: #eef5ff;
+  color: var(--text);
+  background: #f4f7fb;
+}
+
+body.dark nav a:hover,
+body.dark nav a.active {
+  color: var(--text);
+  background: #1a2431;
 }
 
 main {
@@ -188,6 +197,21 @@ button {
   justify-content: center;
   gap: 7px;
   white-space: nowrap;
+}
+
+.icon-button {
+  width: 36px;
+  min-width: 36px;
+  padding: 0;
+}
+
+.icon-button .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.theme-toggle {
+  border-radius: 999px;
 }
 
 button:hover {
@@ -662,10 +686,14 @@ pre {
 .connection-title .icon {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: 0;
   color: var(--blue);
-  background: #eef5ff;
-  padding: 9px;
+  background: transparent;
+  padding: 0;
+}
+
+.connection-title .icon img {
+  filter: none;
 }
 
 .provider-mark {
@@ -761,7 +789,9 @@ input {
 
   .sidebar {
     min-height: auto;
+    height: auto;
     position: static;
+    overflow: visible;
     display: flex;
     align-items: center;
     justify-content: space-between;

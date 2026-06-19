@@ -1,8 +1,10 @@
 #!/bin/sh
 
-BASE="/persistent/ubnt-cloud"
+BASE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+PROJECT_ROOT="$(CDPATH= cd -- "$BASE/.." && pwd)"
 
-COMMON_MAP="/persistent/wg-map.conf"
+COMMON_MAP="$PROJECT_ROOT/wg-map.conf"
+[ -f "$COMMON_MAP" ] || COMMON_MAP="/persistent/wg-map.conf"
 MAP="${UNIFI_WG_MAP:-$COMMON_MAP}"
 [ -f "$MAP" ] || MAP="$BASE/wg-map.conf"
 DOMAINS_FILE="$BASE/domains.txt"

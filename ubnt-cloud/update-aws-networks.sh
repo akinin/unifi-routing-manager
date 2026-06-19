@@ -1,6 +1,6 @@
 #!/bin/sh
 
-BASE="/persistent/ubnt-cloud"
+BASE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 JSON="/tmp/aws-ip-ranges.json"
 GENERATED="$BASE/networks-aws-generated.txt"
 NETWORKS="$BASE/networks.txt"

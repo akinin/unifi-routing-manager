@@ -22,6 +22,9 @@ const inlineIcons = {
   cloud: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 18H8a4 4 0 1 1 .7-7.94A5.5 5.5 0 0 1 19 12.5h.5a2.75 2.75 0 0 1 0 5.5h-2"/></svg>',
   update: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10"/><path d="m8 10 4 4 4-4"/><path d="M5 18h14"/></svg>',
   download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4 11.5-11.5Z"/></svg>',
+  moon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a7 7 0 1 0 11 11Z"/></svg>',
+  sun: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>',
   route: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 18.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path d="M17.5 10.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path d="M9 16h3.5c2.2 0 4-1.8 4-4v-1.5"/></svg>',
   dns: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7.5h14"/><path d="M5 12h14"/><path d="M5 16.5h14"/><path d="M7 4.5h10c1.1 0 2 .9 2 2v11c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2v-11c0-1.1.9-2 2-2Z"/></svg>',
   refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.2 9A7 7 0 0 0 6.5 7.2L4 10"/><path d="M5.8 15A7 7 0 0 0 17.5 16.8L20 14"/></svg>',
@@ -178,7 +181,7 @@ function renderProject(project) {
         ? values.map((value) => `<code>${escapeHtml(value)}</code>`).join("")
         : `<p>No entries</p>`;
       const editorKey = editorKeyFor(project.key, label);
-      const editButton = editorKey ? `<button data-open-editor="${editorKey}" type="button">Edit</button>` : "";
+      const editButton = editorKey ? `<button class="icon-button edit-button" data-open-editor="${editorKey}" type="button" title="Edit" aria-label="Edit ${escapeHtml(readableFileLabel(label))}">${icon("edit")}</button>` : "";
       return `<div><div class="list-head"><h3>${escapeHtml(readableFileLabel(label))}</h3>${editButton}</div>${chips}</div>`;
     })
     .join("");
@@ -320,6 +323,14 @@ function showToast(message) {
   }, 7000);
 }
 
+function renderThemeButton() {
+  const button = $("#themeBtn");
+  const dark = document.body.classList.contains("dark");
+  button.innerHTML = icon(dark ? "sun" : "moon");
+  button.title = dark ? "Light theme" : "Dark theme";
+  button.setAttribute("aria-label", button.title);
+}
+
 function enhanceButtons() {
   const actionIcons = {
     "dnscrypt.update": "refresh",
@@ -336,6 +347,11 @@ function enhanceButtons() {
     const label = button.textContent.trim();
     const iconName = actionIcons[button.dataset.action] || "play";
     button.innerHTML = `${icon(iconName)}<span>${escapeHtml(label)}</span>`;
+  });
+
+  document.querySelectorAll("button[data-open-editor].icon-button").forEach((button) => {
+    if (button.querySelector(".icon")) return;
+    button.innerHTML = icon("edit");
   });
 
   const refreshBtn = $("#refreshBtn");
@@ -460,6 +476,7 @@ $("#logoutBtn").addEventListener("click", async () => {
 $("#themeBtn").addEventListener("click", () => {
   document.body.classList.toggle("dark");
   localStorage.setItem("theme", document.body.classList.contains("dark") ? "dark" : "light");
+  renderThemeButton();
 });
 $("#autoRefresh").addEventListener("change", () => {
   clearInterval(state.autoTimer);
@@ -472,6 +489,7 @@ $("#toggleLogs").addEventListener("click", () => {
   $("#toggleLogs").textContent = box.hidden ? "Expand" : "Collapse";
 });
 if (localStorage.getItem("theme") === "dark") document.body.classList.add("dark");
+renderThemeButton();
 enhanceButtons();
 
 checkAuth().then((ok) => ok && refresh()).catch((error) => {

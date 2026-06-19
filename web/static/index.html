@@ -41,7 +41,7 @@
           </select>
         </div>
         <div class="toolbar">
-          <button id="themeBtn" type="button">Theme</button>
+          <button class="icon-button theme-toggle" id="themeBtn" type="button" title="Theme" aria-label="Theme"></button>
           <button class="avatar-button" id="avatarBtn" type="button"><span id="avatarInitials">UR</span><img id="avatarImg" alt="" hidden></button>
         </div>
       </header>
@@ -71,7 +71,7 @@
             <button data-action="dnscrypt.extract">Extract</button>
             <button data-action="dnscrypt.generate">Generate</button>
             <button data-action="dnscrypt.restart">Restart</button>
-            <button data-open-editor="updates.domains">Edit</button>
+            <button class="icon-button edit-button" data-open-editor="updates.domains" type="button" title="Edit" aria-label="Edit DNSCrypt domains"></button>
           </div>
         </div>
         <div class="kv" id="dnscryptStatus"></div>
