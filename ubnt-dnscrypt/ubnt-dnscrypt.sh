@@ -74,18 +74,24 @@ generate_forwarding() {
 restart_dnscrypt() {
   log "restarting dnscrypt-proxy"
 
+  if ! systemctl list-unit-files dnscrypt-proxy.service >/dev/null 2>&1; then
+    log "dnscrypt-proxy service not managed by systemd, skip restart"
+    return 0
+  fi
+
   if systemctl restart dnscrypt-proxy >/dev/null 2>&1; then
     log "dnscrypt-proxy restarted OK"
   else
-    log "ERROR: dnscrypt-proxy restart failed"
-    return 1
+    log "WARNING: dnscrypt-proxy restart skipped or failed"
+    return 0
   fi
 }
 
 summary() {
   domains_count="$(list_entries "$DOMAINS_FILE" | wc -l)"
   forwarding_count="$(list_entries "$FORWARDING_FILE" | wc -l)"
-  dnscrypt_status="$(systemctl is-active dnscrypt-proxy 2>/dev/null || echo inactive)"
+  dnscrypt_status="$(systemctl is-active dnscrypt-proxy 2>/dev/null)"
+  [ -z "$dnscrypt_status" ] && dnscrypt_status="inactive"
 
   log "summary: domains=$domains_count forwarding=$forwarding_count dnscrypt-proxy=$dnscrypt_status"
 }

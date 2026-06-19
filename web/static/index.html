@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>UniFi Routing</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
@@ -11,8 +12,8 @@
       <div class="brand">
         <div class="mark"><img src="/assets/brand/u-logo.svg" alt="Ubiquiti"></div>
         <div>
-          <strong>Routing</strong>
-          <span>Local Console</span>
+          <strong>URM</strong>
+          <span>UniFi Routing Manager</span>
         </div>
       </div>
       <nav>
@@ -28,11 +29,20 @@
 
     <main>
       <header class="topbar">
-        <div>
-          <h1>UniFi Routing Manager</h1>
-          <p id="rootPath">Loading local state...</p>
+        <div class="toolbar">
+          <button class="primary" id="refreshBtn" type="button">Refresh</button>
+          <select id="autoRefresh">
+            <option value="0">Auto off</option>
+            <option value="15">15 sec</option>
+            <option value="30">30 sec</option>
+            <option value="60">1 min</option>
+            <option value="300">5 min</option>
+          </select>
         </div>
-        <button class="primary" id="refreshBtn" type="button">Refresh</button>
+        <div class="toolbar">
+          <button id="themeBtn" type="button">Theme</button>
+          <button class="avatar-button" id="avatarBtn" type="button"><span id="avatarInitials">UR</span><img id="avatarImg" alt="" hidden></button>
+        </div>
       </header>
 
       <section class="metrics" id="overview"></section>
@@ -60,6 +70,7 @@
             <button data-action="dnscrypt.extract">Extract</button>
             <button data-action="dnscrypt.generate">Generate</button>
             <button data-action="dnscrypt.restart">Restart</button>
+            <button data-open-editor="updates.domains">Edit</button>
           </div>
         </div>
         <div class="kv" id="dnscryptStatus"></div>
@@ -73,6 +84,8 @@
             <p>Local icon patch state.</p>
           </div>
           <div class="actions">
+            <button data-open-download="provider">Add provider</button>
+            <button data-open-download="country">Add flag</button>
             <button data-action="icons.discover">Discover</button>
             <button data-action="icons.install">Install</button>
             <button class="danger" data-action="icons.uninstall">Uninstall</button>
@@ -82,7 +95,7 @@
         <div class="icon-gallery" id="iconsList"></div>
       </section>
 
-      <section class="panel" id="editor">
+      <section class="panel" id="editor" hidden>
         <div class="panel-head">
           <div>
             <h2>Editor</h2>
@@ -125,12 +138,45 @@
             <option value="dnscrypt">DNSCrypt</option>
             <option value="icons">ISP Icons</option>
           </select>
+          <button id="toggleLogs" type="button">Expand</button>
         </div>
-        <pre id="logBox">Loading logs...</pre>
+        <pre id="logBox" hidden>Loading logs...</pre>
       </section>
     </main>
 
     <div class="toast" id="toast" hidden></div>
+    <div class="modal" id="loginModal">
+      <form class="modal-card" id="loginForm">
+        <h2>Sign in</h2>
+        <input id="loginUser" autocomplete="username" placeholder="Login">
+        <input id="loginPass" autocomplete="current-password" type="password" placeholder="Password">
+        <button class="primary" type="submit">Sign in</button>
+      </form>
+    </div>
+    <div class="modal" id="editorModal" hidden>
+      <div class="modal-card wide">
+        <div class="modal-head"><h2 id="editorTitle">Editor</h2><button data-close-modal type="button">Close</button></div>
+        <p id="editorPath"></p>
+        <textarea id="modalEditor" spellcheck="false"></textarea>
+        <button class="primary" id="saveModalEditor" type="button">Save</button>
+      </div>
+    </div>
+    <div class="modal" id="downloadModal" hidden>
+      <div class="modal-card">
+        <div class="modal-head"><h2 id="downloadTitle">Upload</h2><button data-close-modal type="button">Close</button></div>
+        <input id="downloadUrl" placeholder="https://...">
+        <input id="downloadName" placeholder="file.png / file.svg / file.ico">
+        <button class="primary" id="downloadBtn" type="button">Upload</button>
+      </div>
+    </div>
+    <div class="modal" id="profileModal" hidden>
+      <div class="modal-card">
+        <div class="modal-head"><h2>Profile</h2><button data-close-modal type="button">Close</button></div>
+        <input id="avatarFile" type="file" accept="image/png,image/jpeg">
+        <button class="primary" id="uploadAvatar" type="button">Upload avatar</button>
+        <button class="danger" id="logoutBtn" type="button">Logout</button>
+      </div>
+    </div>
     <script src="/app.js"></script>
   </body>
 </html>

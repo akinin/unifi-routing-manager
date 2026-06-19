@@ -1,6 +1,10 @@
 const state = {
   status: null,
   busy: false,
+  files: null,
+  editorKey: "",
+  downloadKind: "",
+  autoTimer: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -52,6 +56,13 @@ function actionButton(action, label, iconName, danger = false) {
   return `<button class="${danger ? "danger" : ""}" data-action="${action}">${icon(iconName)}<span>${label}</span></button>`;
 }
 
+const editorLabels = {
+  "cloud.domains": "Cloud domains",
+  "cloud.networks": "Cloud manual networks",
+  "updates.domains": "Updates domains",
+  "wg.map": "WireGuard map",
+};
+
 function badge(value) {
   const text = String(value || "unknown");
   let tone = "";
@@ -95,30 +106,38 @@ function renderMetrics(data) {
 }
 
 function renderConnections(data) {
-  const connections = data.connections || [];
+  const connections = (data.connections || []).filter((item) => item.ip && item.ip !== "N/A");
   $("#connectionsList").innerHTML = connections.length
-    ? connections
+    ? `
+      <div class="connection header">
+        <div>Connection</div>
+        <div>IP</div>
+        <div>Country</div>
+        <div>Provider</div>
+      </div>
+      ${connections
         .map((item) => {
-          const active = item.active ? `<span class="active-pill">${escapeHtml(item.activeFor.join(" + "))}</span>` : "";
+          const active = item.active ? item.activeFor.map((tag) => `<span class="active-pill">${escapeHtml(tag)}</span>`).join("") : "";
           const title = item.iface
             ? `${escapeHtml(item.label)} <span>${escapeHtml(item.iface)}</span>`
-            : escapeHtml(item.label);
+            : "ISP";
           const country = item.countryCode && item.countryCode !== "Unknown"
-            ? `${escapeHtml(item.countryCode)} · ${escapeHtml(item.country)}`
+            ? `${item.flag ? `<img class="flag" src="${escapeHtml(item.flag)}" alt="">` : ""}${escapeHtml(item.countryCode)} · ${escapeHtml(item.country)}`
             : escapeHtml(item.country || "Unknown");
+          const provider = `${item.icon ? `<img class="provider-inline" src="${escapeHtml(item.icon)}" alt="">` : ""}${escapeHtml(item.isp)}`;
           return `
             <article class="connection ${item.active ? "active" : ""}">
               <div class="connection-title">
-                ${item.iface ? icon("wireguard") : providerIcon(item)}
+                ${icon(item.iface ? "wireguard" : "route")}
                 <div><strong>${title}</strong>${active}</div>
               </div>
-              <div><span>IP</span><strong>${escapeHtml(item.ip)}</strong></div>
-              <div><span>Country</span><strong>${country}</strong></div>
-              <div><span>Provider</span><strong>${escapeHtml(item.isp)}</strong></div>
+              <div><strong>${escapeHtml(item.ip)}</strong></div>
+              <div><strong class="inline-media">${country}</strong></div>
+              <div><strong class="inline-media">${provider}</strong></div>
             </article>
           `;
         })
-        .join("")
+        .join("")}`
     : `<p class="empty">No connection data.</p>`;
 }
 
@@ -128,6 +147,13 @@ function readableFileLabel(label) {
     networks: "Networks",
     addresses: "Resolved IP addresses",
   }[label] || label;
+}
+
+function editorKeyFor(projectKey, label) {
+  if (projectKey === "cloud" && label === "domains") return "cloud.domains";
+  if (projectKey === "cloud" && label === "networks") return "cloud.networks";
+  if (projectKey === "updates" && label === "domains") return "updates.domains";
+  return "";
 }
 
 function eventLine(event, fallback) {
@@ -142,7 +168,9 @@ function renderProject(project) {
       const chips = values.length
         ? values.map((value) => `<code>${escapeHtml(value)}</code>`).join("")
         : `<p>No entries</p>`;
-      return `<div><h3>${escapeHtml(readableFileLabel(label))}</h3>${chips}</div>`;
+      const editorKey = editorKeyFor(project.key, label);
+      const editButton = editorKey ? `<button data-open-editor="${editorKey}" type="button">Edit</button>` : "";
+      return `<div><div class="list-head"><h3>${escapeHtml(readableFileLabel(label))}</h3>${editButton}</div>${chips}</div>`;
     })
     .join("");
 
@@ -190,8 +218,11 @@ function renderStatus(data) {
 
   $("#dnscryptStatus").innerHTML = `
     <div><span>Forwarding state</span><strong>${badge(data.dnscrypt.service)}</strong></div>
+    <div><span>Timer</span><strong>${badge(data.dnscrypt.timer)}</strong></div>
+    <div><span>Enabled</span><strong>${badge(data.dnscrypt.enabled)}</strong></div>
     <div><span>Domains</span><strong>${escapeHtml(data.dnscrypt.domains)}</strong></div>
     <div><span>Forwarding</span><strong>${escapeHtml(data.dnscrypt.forwarding)}</strong></div>
+    <div><span>DNS route</span><strong>${escapeHtml(data.dnscrypt.route?.name || data.dnscrypt.route?.iface || "unknown")}</strong></div>
     <div><span>Last activity</span><strong class="event-compact">${eventLine(data.dnscrypt.lastEvent, data.dnscrypt.lastLog)}</strong></div>
   `;
   $("#dnscryptDomains").innerHTML = (data.dnscrypt.samples || [])
@@ -212,6 +243,7 @@ function renderStatus(data) {
 
 async function loadEditors() {
   const data = await getJson("/api/files");
+  state.files = data.files || {};
   document.querySelectorAll("[data-editor]").forEach((editor) => {
     const item = data.files?.[editor.dataset.editor];
     if (!item) return;
@@ -221,12 +253,45 @@ async function loadEditors() {
   });
 }
 
+async function checkAuth() {
+  const me = await getJson("/api/auth/me");
+  const modal = $("#loginModal");
+  modal.hidden = Boolean(me.authenticated);
+  if (me.authenticated) {
+    $("#avatarInitials").textContent = (me.name || me.username || "UR").slice(0, 2).toUpperCase();
+    if (me.avatar) {
+      $("#avatarImg").src = me.avatar;
+      $("#avatarImg").hidden = false;
+      $("#avatarInitials").hidden = true;
+    }
+  }
+  return me.authenticated;
+}
+
 async function refresh() {
+  if (!(await checkAuth())) return;
   const data = await getJson("/api/status");
   renderStatus(data);
   enhanceButtons();
   await loadLogs();
   await loadEditors();
+}
+
+function openEditor(key) {
+  state.editorKey = key;
+  const item = state.files?.[key];
+  $("#editorTitle").textContent = editorLabels[key] || key;
+  $("#editorPath").textContent = item?.path || "";
+  $("#modalEditor").value = item?.content || "";
+  $("#editorModal").hidden = false;
+}
+
+function openDownload(kind) {
+  state.downloadKind = kind;
+  $("#downloadTitle").textContent = kind === "country" ? "Add country flag" : "Add provider icon";
+  $("#downloadUrl").value = "";
+  $("#downloadName").value = "";
+  $("#downloadModal").hidden = false;
 }
 
 async function loadLogs() {
@@ -289,7 +354,7 @@ async function runAction(action) {
 }
 
 async function saveEditor(key) {
-  const editor = document.querySelector(`[data-editor="${key}"]`);
+  const editor = key === state.editorKey ? $("#modalEditor") : document.querySelector(`[data-editor="${key}"]`);
   if (!editor) return;
   const result = await getJson("/api/files", {
     method: "POST",
@@ -298,6 +363,48 @@ async function saveEditor(key) {
   });
   showToast(`${result.ok ? "Saved" : "Failed"}: ${key}\n${result.output || ""}`.trim());
   await refresh();
+  $("#editorModal").hidden = true;
+}
+
+async function login(username, password) {
+  const result = await getJson("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (result.ok) {
+    $("#loginModal").hidden = true;
+    await refresh();
+  }
+}
+
+async function downloadAsset() {
+  const result = await getJson("/api/assets/download", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind: state.downloadKind, url: $("#downloadUrl").value, filename: $("#downloadName").value }),
+  });
+  showToast(`${result.ok ? "Uploaded" : "Failed"}\n${result.output || ""}`.trim());
+  $("#downloadModal").hidden = true;
+  await refresh();
+}
+
+async function uploadAvatar() {
+  const file = $("#avatarFile").files[0];
+  if (!file) return;
+  const data = await new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(file);
+  });
+  const result = await getJson("/api/auth/avatar", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename: file.name, data }),
+  });
+  showToast(result.ok ? "Avatar updated" : result.output || "Failed");
+  $("#profileModal").hidden = true;
+  await checkAuth();
 }
 
 document.addEventListener("click", (event) => {
@@ -305,12 +412,46 @@ document.addEventListener("click", (event) => {
   if (button) runAction(button.dataset.action);
   const save = event.target.closest("[data-save-editor]");
   if (save) saveEditor(save.dataset.saveEditor);
+  const open = event.target.closest("[data-open-editor]");
+  if (open) openEditor(open.dataset.openEditor);
+  const download = event.target.closest("[data-open-download]");
+  if (download) openDownload(download.dataset.openDownload);
+  if (event.target.closest("[data-close-modal]")) event.target.closest(".modal").hidden = true;
 });
 
 $("#refreshBtn").addEventListener("click", refresh);
 $("#logTarget").addEventListener("change", loadLogs);
+$("#loginForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  login($("#loginUser").value, $("#loginPass").value).catch((error) => showToast(error.message));
+});
+$("#saveModalEditor").addEventListener("click", () => saveEditor(state.editorKey));
+$("#downloadBtn").addEventListener("click", downloadAsset);
+$("#avatarBtn").addEventListener("click", () => {
+  $("#profileModal").hidden = false;
+});
+$("#uploadAvatar").addEventListener("click", uploadAvatar);
+$("#logoutBtn").addEventListener("click", async () => {
+  await getJson("/api/auth/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  location.reload();
+});
+$("#themeBtn").addEventListener("click", () => {
+  document.body.classList.toggle("dark");
+  localStorage.setItem("theme", document.body.classList.contains("dark") ? "dark" : "light");
+});
+$("#autoRefresh").addEventListener("change", () => {
+  clearInterval(state.autoTimer);
+  const seconds = Number($("#autoRefresh").value);
+  if (seconds > 0) state.autoTimer = setInterval(refresh, seconds * 1000);
+});
+$("#toggleLogs").addEventListener("click", () => {
+  const box = $("#logBox");
+  box.hidden = !box.hidden;
+  $("#toggleLogs").textContent = box.hidden ? "Expand" : "Collapse";
+});
+if (localStorage.getItem("theme") === "dark") document.body.classList.add("dark");
 enhanceButtons();
 
-refresh().catch((error) => {
+checkAuth().then((ok) => ok && refresh()).catch((error) => {
   showToast(error.message);
 });

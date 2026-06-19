@@ -8,6 +8,10 @@ import re
 import threading
 import zlib
 import struct
+import hashlib
+import hmac
+import secrets
+import base64
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -43,6 +47,8 @@ PROJECTS = {
         "log": "ubnt-updates-routes.log",
         "files": {
             "domains": "update-domains.txt",
+            "networks": "networks.txt",
+            "addresses": "addresses.txt",
         },
     },
 }
@@ -64,6 +70,9 @@ ISP_ICONS = {
 WEB_SERVICE = "unifi-routing-web.service"
 NET_CACHE = {}
 NET_CACHE_LOCK = threading.Lock()
+AUTH_FILE = ROOT / "urm-auth.json"
+AVATAR_DIR = ROOT / "web-data"
+SESSION_TTL = 86400
 EDITABLE_FILES = {
     "cloud.domains": ROOT / "ubnt-cloud" / "domains.txt",
     "cloud.networks": ROOT / "ubnt-cloud" / "networks-manual.txt",
@@ -77,6 +86,99 @@ def read_text(path, default=""):
         return path.read_text(encoding="utf-8", errors="replace").strip()
     except OSError:
         return default
+
+
+def write_json(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def read_json(path, default=None):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return default if default is not None else {}
+
+
+def hash_password(password, salt=None):
+    salt = salt or secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("ascii"), 120000)
+    return salt, base64.b64encode(digest).decode("ascii")
+
+
+def ensure_auth_config():
+    data = read_json(AUTH_FILE, {})
+    if data.get("username") and data.get("passwordHash") and data.get("sessionSecret"):
+        return data
+    salt, digest = hash_password("admin")
+    data = {
+        "name": "Administrator",
+        "username": "admin",
+        "passwordSalt": salt,
+        "passwordHash": digest,
+        "sessionSecret": secrets.token_hex(32),
+        "avatar": "",
+    }
+    write_json(AUTH_FILE, data)
+    return data
+
+
+def verify_password(password, config):
+    salt = config.get("passwordSalt", "")
+    expected = config.get("passwordHash", "")
+    if not salt or not expected:
+        return False
+    _, digest = hash_password(password, salt)
+    return hmac.compare_digest(digest, expected)
+
+
+def make_session(username):
+    config = ensure_auth_config()
+    expires = int(time.time()) + SESSION_TTL
+    payload = f"{username}:{expires}"
+    signature = hmac.new(config["sessionSecret"].encode("ascii"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return base64.urlsafe_b64encode(f"{payload}:{signature}".encode("utf-8")).decode("ascii")
+
+
+def parse_cookies(header):
+    cookies = {}
+    for part in (header or "").split(";"):
+        if "=" in part:
+            key, value = part.strip().split("=", 1)
+            cookies[key] = value
+    return cookies
+
+
+def verify_session(cookie):
+    if not cookie:
+        return False
+    config = ensure_auth_config()
+    try:
+        decoded = base64.urlsafe_b64decode(cookie.encode("ascii")).decode("utf-8")
+        username, expires, signature = decoded.rsplit(":", 2)
+    except (ValueError, UnicodeDecodeError):
+        return False
+    if username != config.get("username") or int(expires) < int(time.time()):
+        return False
+    payload = f"{username}:{expires}"
+    expected = hmac.new(config["sessionSecret"].encode("ascii"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(signature, expected)
+
+
+def avatar_url(config=None):
+    config = config or ensure_auth_config()
+    avatar = config.get("avatar") or ""
+    return f"/api/avatar/{Path(avatar).name}" if avatar else ""
+
+
+def safe_asset_name(filename, allowed=(".png", ".svg", ".ico", ".jpg", ".jpeg")):
+    name = Path(filename or "").name
+    suffix = Path(name).suffix.lower()
+    if suffix not in allowed:
+        return ""
+    if not re.match(r"^[A-Za-z0-9_.-]+$", name):
+        return ""
+    return name
 
 
 def list_entries(path):
@@ -220,6 +322,58 @@ def slugify(value):
     return value.strip("_") or "provider"
 
 
+def wg_map_names():
+    names = {}
+    for path in (ROOT / "wg-map.conf", ROOT / "ubnt-cloud" / "wg-map.conf", ROOT / "ubnt-updates" / "wg-map.conf"):
+        for line in read_text(path, "").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split(None, 2)
+            if len(parts) >= 2:
+                names[parts[1]] = parts[2] if len(parts) > 2 else parts[1]
+        if names:
+            break
+    return names
+
+
+def download_url(url, path, timeout=12):
+    if not re.match(r"^https://", url or ""):
+        return False, "Only https URLs are allowed"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    result = run(["curl", "-fsSL", "--connect-timeout", "5", "--max-time", str(timeout), url, "-o", str(path)], timeout=timeout + 4)
+    if not result["ok"]:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        return False, result["output"] or "Download failed"
+    return True, f"Downloaded {path.name}"
+
+
+def country_flag_filename(country_code):
+    code = (country_code or "").lower()
+    return f"{code}.svg" if re.match(r"^[a-z]{2}$", code) else ""
+
+
+def country_flag_url(country_code):
+    filename = country_flag_filename(country_code)
+    path = ISP_ICONS["dir"] / "flags" / filename if filename else None
+    if path and path.exists():
+        return f"/api/asset/flags/{filename}"
+    return ""
+
+
+def ensure_country_flag(country_code):
+    filename = country_flag_filename(country_code)
+    if not filename:
+        return ""
+    path = ISP_ICONS["dir"] / "flags" / filename
+    if not path.exists():
+        download_url(f"https://static.2ip.io/images/flags/4x3/{filename}", path)
+    return country_flag_url(country_code)
+
+
 def provider_icon_filename(isp="", asn=""):
     base = f"{asn}_101x101.png" if asn else f"{slugify(isp)}_101x101.png"
     path = ISP_ICONS["dir"] / base
@@ -232,7 +386,23 @@ def provider_icon_filename(isp="", asn=""):
 
 
 def provider_icon_url(filename):
-    return f"/api/provider-icon/{filename}" if filename else ""
+    return f"/api/asset/providers/{filename}" if filename else ""
+
+
+def ensure_provider_icon(isp="", asn=""):
+    filename = provider_icon_filename(isp, asn)
+    if filename:
+        return filename
+    if asn:
+        filename = f"{asn}_101x101.png"
+        ok, _ = download_url(f"https://static.2ip.io/asn_favicons/{asn}.png", ISP_ICONS["dir"] / filename)
+        if ok:
+            return filename
+    filename = f"{slugify(isp)}_101x101.png"
+    path = ISP_ICONS["dir"] / filename
+    if not path.exists() and isp not in ("N/A", "Unknown"):
+        path.write_bytes(generated_icon_png(isp))
+    return filename if path.exists() else ""
 
 
 def connection_status(label, iface=None, active_for=None):
@@ -247,7 +417,8 @@ def connection_status(label, iface=None, active_for=None):
         "isp": geo["isp"],
         "asn": geo.get("asn", ""),
         "asname": geo.get("asname", ""),
-        "icon": provider_icon_url(provider_icon_filename(geo["isp"], geo.get("asn", ""))),
+        "icon": provider_icon_url(ensure_provider_icon(geo["isp"], geo.get("asn", ""))),
+        "flag": ensure_country_flag(geo["countryCode"]),
         "activeFor": active_for or [],
         "active": bool(active_for),
     }
@@ -268,9 +439,10 @@ def connections_status(projects):
             active_by_iface.setdefault(iface, []).append(project["title"].replace("UniFi ", ""))
 
     connections = [connection_status("Direct", active_for=[])]
+    names = wg_map_names()
     for iface in wireguard_interfaces():
         active_for = active_by_iface.get(iface, [])
-        label = iface
+        label = names.get(iface, iface)
         for project in projects:
             if project.get("activeIface") == iface and project.get("activeName") not in ("unknown", "not configured"):
                 label = project["activeName"]
@@ -421,6 +593,22 @@ def rules_count(priority, table):
     return "unknown"
 
 
+def iface_friendly_name(iface):
+    if not iface:
+        return ""
+    return wg_map_names().get(iface, iface)
+
+
+def route_to(target):
+    result = run(["sh", "-lc", f"ip route get {target} 2>/dev/null | head -1"], timeout=6)
+    line = result["output"] if result["ok"] else ""
+    iface = ""
+    match = re.search(r"\bdev\s+(\S+)", line)
+    if match:
+        iface = match.group(1)
+    return {"target": target, "iface": iface, "name": iface_friendly_name(iface), "raw": line}
+
+
 def project_status(key, config):
     base = config["dir"]
     table = read_text(base / "active-table", "unknown")
@@ -468,6 +656,9 @@ def dnscrypt_status():
         "domains": domains,
         "samples": list_entries(base / "domains.txt")[:16],
         "forwarding": forwarding_rules,
+        "timer": systemctl_value("is-active", "ubnt-dnscrypt.timer"),
+        "enabled": systemctl_value("is-enabled", "ubnt-dnscrypt.timer"),
+        "route": route_to("1.1.1.1"),
         "lastLog": tail(base / DNSCRYPT["log"], 1),
         "lastEvent": human_event(tail(base / DNSCRYPT["log"], 1)),
     }
@@ -522,6 +713,22 @@ def save_editable_file(key, content):
         return {"ok": update_result["ok"], "output": f"Saved {path}\n{update_result['output']}".strip()}
 
     return {"ok": True, "output": f"Saved {path}"}
+
+
+def download_asset(kind, url, filename):
+    name = safe_asset_name(filename, allowed=(".png", ".svg", ".ico"))
+    if not name:
+        return {"ok": False, "output": "Allowed formats: png, svg, ico. Use a safe file name."}
+    if kind == "country":
+        path = ISP_ICONS["dir"] / "flags" / name
+    elif kind == "provider":
+        if not name.endswith("_101x101.png") and name.endswith(".png"):
+            name = f"{Path(name).stem}_101x101.png"
+        path = ISP_ICONS["dir"] / name
+    else:
+        return {"ok": False, "output": "Unknown asset type"}
+    ok, output = download_url(url, path)
+    return {"ok": ok, "output": output}
 
 
 def status_payload():
@@ -616,15 +823,50 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def is_authenticated(self):
+        cookies = parse_cookies(self.headers.get("Cookie", ""))
+        return verify_session(cookies.get("urm_session"))
+
+    def require_auth(self):
+        if self.is_authenticated():
+            return True
+        self.send_json({"ok": False, "output": "Unauthorized"}, 401)
+        return False
+
     def do_GET(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/auth/me":
+            config = ensure_auth_config()
+            self.send_json({
+                "authenticated": self.is_authenticated(),
+                "name": config.get("name", ""),
+                "username": config.get("username", ""),
+                "avatar": avatar_url(config),
+            })
+            return
+        if parsed.path.startswith("/api/avatar/"):
+            filename = safe_asset_name(Path(parsed.path).name, allowed=(".png", ".jpg", ".jpeg"))
+            path = AVATAR_DIR / filename if filename else None
+            if not path or not path.exists():
+                self.send_error(404)
+                return
+            body = path.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg" if path.suffix.lower() in (".jpg", ".jpeg") else "image/png")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if parsed.path.startswith("/api/") and not self.require_auth():
+            return
         if parsed.path == "/api/status":
             self.send_json(status_payload())
             return
         if parsed.path == "/api/files":
             self.send_json(editable_payload())
             return
-        if parsed.path.startswith("/api/provider-icon/"):
+        if parsed.path.startswith("/api/asset/providers/"):
             filename = Path(parsed.path).name
             path = ISP_ICONS["dir"] / filename
             if not re.match(r"^[A-Za-z0-9_.-]+_101x101\.png$", filename) or not path.exists():
@@ -633,6 +875,21 @@ class Handler(SimpleHTTPRequestHandler):
             body = path.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", "image/png")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if parsed.path.startswith("/api/asset/flags/"):
+            filename = Path(parsed.path).name
+            path = ISP_ICONS["dir"] / "flags" / filename
+            if not safe_asset_name(filename, allowed=(".png", ".svg", ".ico")) or not path.exists():
+                self.send_error(404)
+                return
+            body = path.read_bytes()
+            content_type = "image/svg+xml" if path.suffix.lower() == ".svg" else "image/x-icon" if path.suffix.lower() == ".ico" else "image/png"
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -655,7 +912,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path not in ("/api/action", "/api/files"):
+        if parsed.path not in ("/api/action", "/api/files", "/api/auth/login", "/api/auth/logout", "/api/auth/avatar", "/api/assets/download"):
             self.send_json({"ok": False, "output": "Not found"}, 404)
             return
         length = int(self.headers.get("Content-Length", "0"))
@@ -663,6 +920,57 @@ class Handler(SimpleHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length) or b"{}")
         except json.JSONDecodeError:
             self.send_json({"ok": False, "output": "Invalid JSON"}, 400)
+            return
+        if parsed.path == "/api/auth/login":
+            config = ensure_auth_config()
+            if payload.get("username") == config.get("username") and verify_password(payload.get("password", ""), config):
+                session = make_session(config["username"])
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Set-Cookie", f"urm_session={session}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_TTL}")
+                body = json.dumps({"ok": True, "name": config.get("name", ""), "avatar": avatar_url(config)}, ensure_ascii=False).encode("utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            self.send_json({"ok": False, "output": "Invalid login or password"}, 403)
+            return
+        if parsed.path == "/api/auth/logout":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Set-Cookie", "urm_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax")
+            body = b'{"ok": true}'
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if not self.require_auth():
+            return
+        if parsed.path == "/api/auth/avatar":
+            filename = safe_asset_name(payload.get("filename", ""), allowed=(".png", ".jpg", ".jpeg"))
+            data_url = payload.get("data", "")
+            if not filename or "," not in data_url:
+                self.send_json({"ok": False, "output": "Invalid avatar"}, 400)
+                return
+            try:
+                raw = base64.b64decode(data_url.split(",", 1)[1], validate=True)
+            except ValueError:
+                self.send_json({"ok": False, "output": "Invalid avatar data"}, 400)
+                return
+            if len(raw) > 512 * 1024:
+                self.send_json({"ok": False, "output": "Avatar is too large"}, 400)
+                return
+            AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+            path = AVATAR_DIR / filename
+            path.write_bytes(raw)
+            config = ensure_auth_config()
+            config["avatar"] = str(path)
+            write_json(AUTH_FILE, config)
+            self.send_json({"ok": True, "avatar": avatar_url(config)})
+            return
+        if parsed.path == "/api/assets/download":
+            self.send_json(download_asset(payload.get("kind", ""), payload.get("url", ""), payload.get("filename", "")))
             return
         if parsed.path == "/api/files":
             self.send_json(save_editable_file(payload.get("key", ""), payload.get("content", "")))

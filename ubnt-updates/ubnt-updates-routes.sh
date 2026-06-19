@@ -6,6 +6,8 @@ COMMON_MAP="/persistent/wg-map.conf"
 MAP="${UNIFI_WG_MAP:-$COMMON_MAP}"
 [ -f "$MAP" ] || MAP="$BASE/wg-map.conf"
 DOMAINS_FILE="$BASE/update-domains.txt"
+NETWORKS_FILE="$BASE/networks.txt"
+ADDRESSES_FILE="$BASE/addresses.txt"
 
 ACTIVE_TABLE_FILE="$BASE/active-table"
 ACTIVE_IFACE_FILE="$BASE/active-iface"
@@ -41,6 +43,8 @@ ensure_files() {
   mkdir -p "$BASE"
   [ -f "$MAP" ] || touch "$MAP"
   [ -f "$DOMAINS_FILE" ] || touch "$DOMAINS_FILE"
+  [ -f "$NETWORKS_FILE" ] || touch "$NETWORKS_FILE"
+  [ -f "$ADDRESSES_FILE" ] || touch "$ADDRESSES_FILE"
   [ -f "$LOG" ] || touch "$LOG"
 }
 
@@ -126,6 +130,7 @@ apply_cdn_networks() {
   table="$1"
 
   log "apply CDN networks via $table"
+  echo "$CDN_NETWORKS" | sed '/^[[:space:]]*$/d' | sort -u > "$NETWORKS_FILE"
 
   echo "$CDN_NETWORKS" | sed '/^[[:space:]]*$/d' | while read -r net; do
     is_cidr4 "$net" || {
@@ -139,6 +144,8 @@ apply_cdn_networks() {
 
 apply_domains() {
   table="$1"
+  tmp="/tmp/ubnt-updates-addresses.txt"
+  : > "$tmp"
 
   log "resolve update domains from $DOMAINS_FILE, tries=$RESOLVE_TRIES"
 
@@ -151,12 +158,16 @@ apply_domains() {
         | sort -u \
         | while read -r ip; do
             is_ipv4 "$ip" || continue
+            echo "$ip" >> "$tmp"
             add_rule "$ip/32" "$table"
           done
       sleep 1
       i=$((i+1))
     done
   done
+
+  sort -u "$tmp" > "$ADDRESSES_FILE"
+  rm -f "$tmp"
 }
 
 flush_selected_conntrack() {
