@@ -15,6 +15,8 @@ const icons = {
 };
 
 const inlineIcons = {
+  cloud: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 18H8a4 4 0 1 1 .7-7.94A5.5 5.5 0 0 1 19 12.5h.5a2.75 2.75 0 0 1 0 5.5h-2"/></svg>',
+  update: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10"/><path d="m8 10 4 4 4-4"/><path d="M5 18h14"/></svg>',
   route: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 18.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path d="M17.5 10.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path d="M9 16h3.5c2.2 0 4-1.8 4-4v-1.5"/></svg>',
   dns: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7.5h14"/><path d="M5 12h14"/><path d="M5 16.5h14"/><path d="M7 4.5h10c1.1 0 2 .9 2 2v11c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2v-11c0-1.1.9-2 2-2Z"/></svg>',
   refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.2 9A7 7 0 0 0 6.5 7.2L4 10"/><path d="M5.8 15A7 7 0 0 0 17.5 16.8L20 14"/></svg>',
@@ -30,6 +32,20 @@ function icon(name) {
   const src = icons[name] || icons.unifi;
   const brandClass = ["unifi", "unifiOs", "unifiNetwork", "ubiquiti", "image"].includes(name) ? " brand-mark" : "";
   return `<span class="icon${brandClass}"><img src="${src}" alt="" loading="lazy"></span>`;
+}
+
+function providerIcon(item) {
+  if (item.icon) {
+    return `<span class="icon provider-mark"><img src="${escapeHtml(item.icon)}" alt="" loading="lazy"></span>`;
+  }
+  const text = (item.isp || item.label || "IP")
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "IP";
+  return `<span class="icon provider-mark fallback">${escapeHtml(text)}</span>`;
 }
 
 function actionButton(action, label, iconName, danger = false) {
@@ -69,11 +85,10 @@ function renderMetrics(data) {
     .reduce((sum, value) => sum + value, 0);
 
   $("#overview").innerHTML = [
-    ["unifiNetwork", "Cloud tunnel", cloud?.activeName || "unknown"],
-    ["wireguard", "Updates tunnel", updates?.activeName || "unknown"],
+    ["cloud", "Cloud", cloud?.activeName || "unknown"],
+    ["update", "Updates", updates?.activeName || "unknown"],
     ["route", "Policy rules", totalRules || "unknown"],
     ["dns", "DNSCrypt", data.dnscrypt.service || "unknown"],
-    ["unifi", "Web UI", data.web?.service || "unknown"],
   ]
     .map(([iconName, label, value]) => `<article class="metric">${icon(iconName)}<div><span>${label}</span><strong>${escapeHtml(value)}</strong></div></article>`)
     .join("");
@@ -94,7 +109,7 @@ function renderConnections(data) {
           return `
             <article class="connection ${item.active ? "active" : ""}">
               <div class="connection-title">
-                ${icon(item.iface ? "wireguard" : "route")}
+                ${item.iface ? icon("wireguard") : providerIcon(item)}
                 <div><strong>${title}</strong>${active}</div>
               </div>
               <div><span>IP</span><strong>${escapeHtml(item.ip)}</strong></div>
@@ -131,7 +146,7 @@ function renderProject(project) {
     })
     .join("");
 
-  const projectIcon = project.key === "cloud" ? "unifiNetwork" : "wireguard";
+  const projectIcon = project.key === "cloud" ? "cloud" : "update";
   return `
     <section class="panel" id="${project.key}">
       <div class="panel-head">
@@ -179,13 +194,31 @@ function renderStatus(data) {
     <div><span>Forwarding</span><strong>${escapeHtml(data.dnscrypt.forwarding)}</strong></div>
     <div><span>Last activity</span><strong class="event-compact">${eventLine(data.dnscrypt.lastEvent, data.dnscrypt.lastLog)}</strong></div>
   `;
+  $("#dnscryptDomains").innerHTML = (data.dnscrypt.samples || [])
+    .map((value) => `<code>${escapeHtml(value)}</code>`)
+    .join("") || "<p>No domains</p>";
 
   $("#iconsStatus").innerHTML = `
     <div><span>Directory</span><strong>${badge(data.ispIcons.exists ? "configured" : "not configured")}</strong></div>
     <div><span>Icons</span><strong>${escapeHtml(data.ispIcons.icons)}</strong></div>
-    <div><span>Path</span><strong>${escapeHtml(data.ispIcons.directory)}</strong></div>
+    <div><span>ASN install path</span><strong>${escapeHtml(data.ispIcons.installAsnPath)}</strong></div>
+    <div><span>Name install path</span><strong>${escapeHtml(data.ispIcons.installNamePath)}</strong></div>
     <div><span>Last activity</span><strong class="event-compact">${eventLine(data.ispIcons.lastEvent, data.ispIcons.lastLog)}</strong></div>
   `;
+  $("#iconsList").innerHTML = (data.ispIcons.items || [])
+    .map((item) => `<article class="isp-icon-item"><img src="${escapeHtml(item.url)}" alt=""><span>${escapeHtml(item.name)}</span></article>`)
+    .join("") || "<p>No icons</p>";
+}
+
+async function loadEditors() {
+  const data = await getJson("/api/files");
+  document.querySelectorAll("[data-editor]").forEach((editor) => {
+    const item = data.files?.[editor.dataset.editor];
+    if (!item) return;
+    editor.value = item.content || "";
+    const path = document.querySelector(`[data-editor-path="${editor.dataset.editor}"]`);
+    if (path) path.textContent = item.path;
+  });
 }
 
 async function refresh() {
@@ -193,6 +226,7 @@ async function refresh() {
   renderStatus(data);
   enhanceButtons();
   await loadLogs();
+  await loadEditors();
 }
 
 async function loadLogs() {
@@ -218,6 +252,8 @@ function enhanceButtons() {
     "dnscrypt.generate": "route",
     "dnscrypt.restart": "refresh",
     "icons.install": "image",
+    "icons.discover": "refresh",
+    "icons.uninstall": "stop",
   };
 
   document.querySelectorAll("button[data-action]").forEach((button) => {
@@ -252,9 +288,23 @@ async function runAction(action) {
   }
 }
 
+async function saveEditor(key) {
+  const editor = document.querySelector(`[data-editor="${key}"]`);
+  if (!editor) return;
+  const result = await getJson("/api/files", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key, content: editor.value }),
+  });
+  showToast(`${result.ok ? "Saved" : "Failed"}: ${key}\n${result.output || ""}`.trim());
+  await refresh();
+}
+
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-action]");
   if (button) runAction(button.dataset.action);
+  const save = event.target.closest("[data-save-editor]");
+  if (save) saveEditor(save.dataset.saveEditor);
 });
 
 $("#refreshBtn").addEventListener("click", refresh);

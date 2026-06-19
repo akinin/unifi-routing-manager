@@ -6,6 +6,8 @@ import subprocess
 import time
 import re
 import threading
+import zlib
+import struct
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -55,11 +57,19 @@ ISP_ICONS = {
     "dir": ROOT / "ubnt-isp-icons",
     "script": ROOT / "ubnt-isp-icons" / "install.sh",
     "log": "systemd-install.log",
+    "asn_dir": "/usr/lib/unifi/webapps/ROOT/app-unifi/react/images/topology/isp/asn",
+    "name_dir": "/usr/lib/unifi/webapps/ROOT/app-unifi/react/images/topology/isp/name",
 }
 
 WEB_SERVICE = "unifi-routing-web.service"
 NET_CACHE = {}
 NET_CACHE_LOCK = threading.Lock()
+EDITABLE_FILES = {
+    "cloud.domains": ROOT / "ubnt-cloud" / "domains.txt",
+    "cloud.networks": ROOT / "ubnt-cloud" / "networks-manual.txt",
+    "updates.domains": ROOT / "ubnt-updates" / "update-domains.txt",
+    "wg.map": ROOT / "wg-map.conf",
+}
 
 
 def read_text(path, default=""):
@@ -176,27 +186,53 @@ def ip_geo(ip):
 
     def produce():
         if not ip or ip == "N/A":
-            return {"country": "N/A", "countryCode": "N/A", "isp": "N/A"}
+            return {"country": "N/A", "countryCode": "N/A", "isp": "N/A", "asn": "", "asname": ""}
 
         result = run(
-            ["curl", "--connect-timeout", "3", "-sS", f"http://ip-api.com/json/{ip}?fields=country,countryCode,isp"],
+            ["curl", "--connect-timeout", "3", "-sS", f"http://ip-api.com/json/{ip}?fields=country,countryCode,isp,as,asname"],
             timeout=6,
         )
         if not result["ok"] or not result["output"]:
-            return {"country": "Unknown", "countryCode": "Unknown", "isp": "Unknown"}
+            return {"country": "Unknown", "countryCode": "Unknown", "isp": "Unknown", "asn": "", "asname": ""}
 
         try:
             data = json.loads(result["output"])
         except json.JSONDecodeError:
-            return {"country": "Unknown", "countryCode": "Unknown", "isp": "Unknown"}
+            return {"country": "Unknown", "countryCode": "Unknown", "isp": "Unknown", "asn": "", "asname": ""}
+
+        as_text = data.get("as") or ""
+        asn_match = re.search(r"\bAS(\d+)\b", as_text)
 
         return {
             "country": data.get("country") or "Unknown",
             "countryCode": data.get("countryCode") or "Unknown",
             "isp": data.get("isp") or "Unknown",
+            "asn": asn_match.group(1) if asn_match else "",
+            "asname": data.get("asname") or "",
         }
 
     return cached_value(key, 3600, produce)
+
+
+def slugify(value):
+    value = (value or "").strip().lower()
+    value = re.sub(r"[^a-z0-9]+", "_", value)
+    return value.strip("_") or "provider"
+
+
+def provider_icon_filename(isp="", asn=""):
+    base = f"{asn}_101x101.png" if asn else f"{slugify(isp)}_101x101.png"
+    path = ISP_ICONS["dir"] / base
+    if path.exists():
+        return base
+    slug_path = ISP_ICONS["dir"] / f"{slugify(isp)}_101x101.png"
+    if slug_path.exists():
+        return slug_path.name
+    return ""
+
+
+def provider_icon_url(filename):
+    return f"/api/provider-icon/{filename}" if filename else ""
 
 
 def connection_status(label, iface=None, active_for=None):
@@ -209,6 +245,9 @@ def connection_status(label, iface=None, active_for=None):
         "country": geo["country"],
         "countryCode": geo["countryCode"],
         "isp": geo["isp"],
+        "asn": geo.get("asn", ""),
+        "asname": geo.get("asname", ""),
+        "icon": provider_icon_url(provider_icon_filename(geo["isp"], geo.get("asn", ""))),
         "activeFor": active_for or [],
         "active": bool(active_for),
     }
@@ -237,7 +276,123 @@ def connections_status(projects):
                 label = project["activeName"]
                 break
         connections.append(connection_status(label, iface=iface, active_for=active_for))
+    try:
+        generate_provider_icons(connections)
+        for item in connections:
+            item["icon"] = provider_icon_url(provider_icon_filename(item.get("isp", ""), item.get("asn", "")))
+    except OSError:
+        pass
     return connections
+
+
+GLYPHS = {
+    "A": ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
+    "B": ["11110", "10001", "10001", "11110", "10001", "10001", "11110"],
+    "C": ["01111", "10000", "10000", "10000", "10000", "10000", "01111"],
+    "D": ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
+    "E": ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
+    "F": ["11111", "10000", "10000", "11110", "10000", "10000", "10000"],
+    "G": ["01111", "10000", "10000", "10111", "10001", "10001", "01111"],
+    "H": ["10001", "10001", "10001", "11111", "10001", "10001", "10001"],
+    "I": ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
+    "J": ["00111", "00010", "00010", "00010", "10010", "10010", "01100"],
+    "K": ["10001", "10010", "10100", "11000", "10100", "10010", "10001"],
+    "L": ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
+    "M": ["10001", "11011", "10101", "10101", "10001", "10001", "10001"],
+    "N": ["10001", "11001", "10101", "10011", "10001", "10001", "10001"],
+    "O": ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
+    "P": ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
+    "Q": ["01110", "10001", "10001", "10001", "10101", "10010", "01101"],
+    "R": ["11110", "10001", "10001", "11110", "10100", "10010", "10001"],
+    "S": ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
+    "T": ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
+    "U": ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
+    "V": ["10001", "10001", "10001", "10001", "10001", "01010", "00100"],
+    "W": ["10001", "10001", "10001", "10101", "10101", "10101", "01010"],
+    "X": ["10001", "10001", "01010", "00100", "01010", "10001", "10001"],
+    "Y": ["10001", "10001", "01010", "00100", "00100", "00100", "00100"],
+    "Z": ["11111", "00001", "00010", "00100", "01000", "10000", "11111"],
+    "0": ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
+    "1": ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
+    "2": ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
+    "3": ["11110", "00001", "00001", "01110", "00001", "00001", "11110"],
+    "4": ["10010", "10010", "10010", "11111", "00010", "00010", "00010"],
+    "5": ["11111", "10000", "10000", "11110", "00001", "00001", "11110"],
+    "6": ["01110", "10000", "10000", "11110", "10001", "10001", "01110"],
+    "7": ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
+    "8": ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
+    "9": ["01110", "10001", "10001", "01111", "00001", "00001", "01110"],
+}
+
+
+def initials(value):
+    words = re.findall(r"[A-Za-z0-9]+", value or "")
+    if not words:
+        return "IP"
+    if len(words) == 1:
+        return words[0][:2].upper()
+    return (words[0][0] + words[1][0]).upper()
+
+
+def png_chunk(kind, data):
+    body = kind + data
+    return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+
+
+def generated_icon_png(label, size=101):
+    seed = sum(ord(ch) for ch in label)
+    bg = ((seed * 37) % 156 + 40, (seed * 53) % 136 + 50, (seed * 71) % 126 + 70)
+    fg = (255, 255, 255)
+    pixels = [[bg for _ in range(size)] for _ in range(size)]
+
+    text = initials(label)
+    scale = 8 if len(text) == 2 else 10
+    char_w = 5 * scale
+    char_h = 7 * scale
+    gap = 2 * scale
+    total_w = len(text) * char_w + max(0, len(text) - 1) * gap
+    start_x = (size - total_w) // 2
+    start_y = (size - char_h) // 2
+
+    for idx, ch in enumerate(text):
+        glyph = GLYPHS.get(ch, GLYPHS["I"])
+        offset_x = start_x + idx * (char_w + gap)
+        for row, pattern in enumerate(glyph):
+            for col, bit in enumerate(pattern):
+                if bit != "1":
+                    continue
+                for y in range(start_y + row * scale, start_y + (row + 1) * scale):
+                    for x in range(offset_x + col * scale, offset_x + (col + 1) * scale):
+                        if 0 <= x < size and 0 <= y < size:
+                            pixels[y][x] = fg
+
+    raw = b"".join(b"\x00" + b"".join(bytes(pixel) for pixel in row) for row in pixels)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + png_chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0))
+        + png_chunk(b"IDAT", zlib.compress(raw, 9))
+        + png_chunk(b"IEND", b"")
+    )
+
+
+def generate_provider_icons(connections=None):
+    connections = connections or connections_status([project_status(key, config) for key, config in PROJECTS.items()])
+    ISP_ICONS["dir"].mkdir(parents=True, exist_ok=True)
+    created = []
+    for item in connections:
+        isp = item.get("isp") or item.get("label") or "Provider"
+        if isp in ("N/A", "Unknown"):
+            continue
+        filenames = []
+        if item.get("asn"):
+            filenames.append(f"{item['asn']}_101x101.png")
+        filenames.append(f"{slugify(isp)}_101x101.png")
+        for filename in sorted(set(filenames)):
+            path = ISP_ICONS["dir"] / filename
+            if not path.exists():
+                path.write_bytes(generated_icon_png(isp))
+                created.append(filename)
+    return created
 
 
 def systemctl(*args):
@@ -311,6 +466,7 @@ def dnscrypt_status():
         "service": service,
         "proxyService": proxy_service,
         "domains": domains,
+        "samples": list_entries(base / "domains.txt")[:16],
         "forwarding": forwarding_rules,
         "lastLog": tail(base / DNSCRYPT["log"], 1),
         "lastEvent": human_event(tail(base / DNSCRYPT["log"], 1)),
@@ -319,18 +475,53 @@ def dnscrypt_status():
 
 def isp_icons_status():
     base = ISP_ICONS["dir"]
-    icons = 0
+    icons = []
     try:
-        icons = len(list(base.glob("*_101x101.png")))
+        icons = sorted(path.name for path in base.glob("*_101x101.png"))
     except OSError:
         pass
     return {
         "directory": str(base),
+        "installAsnPath": ISP_ICONS["asn_dir"],
+        "installNamePath": ISP_ICONS["name_dir"],
         "exists": base.exists(),
-        "icons": icons,
+        "icons": len(icons),
+        "items": [{"name": name, "url": provider_icon_url(name)} for name in icons],
         "lastLog": tail(base / ISP_ICONS["log"], 1),
         "lastEvent": human_event(tail(base / ISP_ICONS["log"], 1)),
     }
+
+
+def editable_payload():
+    files = {}
+    for key, path in EDITABLE_FILES.items():
+        files[key] = {
+            "key": key,
+            "path": str(path),
+            "exists": path.exists(),
+            "content": read_text(path, ""),
+        }
+    return {"files": files}
+
+
+def save_editable_file(key, content):
+    path = EDITABLE_FILES.get(key)
+    if not path:
+        return {"ok": False, "output": "Unknown editable file"}
+    if "\x00" in content:
+        return {"ok": False, "output": "Invalid content"}
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        backup = path.with_name(f"{path.name}.bak-web-{time.strftime('%Y%m%d-%H%M%S')}")
+        backup.write_text(path.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+    path.write_text(content.replace("\r\n", "\n").replace("\r", "\n").rstrip() + "\n", encoding="utf-8")
+
+    if key == "cloud.networks":
+        update_result = run(["sh", str(ROOT / "ubnt-cloud" / "update-aws-networks.sh")], timeout=120)
+        return {"ok": update_result["ok"], "output": f"Saved {path}\n{update_result['output']}".strip()}
+
+    return {"ok": True, "output": f"Saved {path}"}
 
 
 def status_payload():
@@ -382,11 +573,21 @@ def action_command(action):
         "dnscrypt.generate": [["sh", str(DNSCRYPT["script"]), "generate"]],
         "dnscrypt.restart": [["sh", str(DNSCRYPT["script"]), "restart"]],
         "icons.install": [["sh", str(ISP_ICONS["script"])]],
+        "icons.uninstall": [["sh", str(ISP_ICONS["script"]), "uninstall"]],
     }
     return commands.get(action)
 
 
 def perform_action(action):
+    if action == "icons.discover":
+        projects = [project_status(key, config) for key, config in PROJECTS.items()]
+        created = generate_provider_icons(connections_status(projects))
+        install = run(["sh", str(ISP_ICONS["script"])], timeout=90)
+        return {
+            "ok": install["ok"],
+            "output": f"Generated icons: {', '.join(created) if created else 'already up to date'}\n{install['output']}".strip(),
+        }
+
     commands = action_command(action)
     if not commands:
         return {"ok": False, "output": "Unknown action"}
@@ -420,6 +621,23 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/status":
             self.send_json(status_payload())
             return
+        if parsed.path == "/api/files":
+            self.send_json(editable_payload())
+            return
+        if parsed.path.startswith("/api/provider-icon/"):
+            filename = Path(parsed.path).name
+            path = ISP_ICONS["dir"] / filename
+            if not re.match(r"^[A-Za-z0-9_.-]+_101x101\.png$", filename) or not path.exists():
+                self.send_error(404)
+                return
+            body = path.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if parsed.path == "/api/logs":
             query = parse_qs(parsed.query)
             target = query.get("target", ["cloud"])[0]
@@ -437,7 +655,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path != "/api/action":
+        if parsed.path not in ("/api/action", "/api/files"):
             self.send_json({"ok": False, "output": "Not found"}, 404)
             return
         length = int(self.headers.get("Content-Length", "0"))
@@ -445,6 +663,9 @@ class Handler(SimpleHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length) or b"{}")
         except json.JSONDecodeError:
             self.send_json({"ok": False, "output": "Invalid JSON"}, 400)
+            return
+        if parsed.path == "/api/files":
+            self.send_json(save_editable_file(payload.get("key", ""), payload.get("content", "")))
             return
         self.send_json(perform_action(payload.get("action", "")))
 
