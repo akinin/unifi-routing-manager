@@ -446,7 +446,7 @@ def connections_status(projects):
         if iface and iface not in ("unknown", "not configured"):
             active_by_iface.setdefault(iface, []).append(project["title"].replace("UniFi ", ""))
 
-    connections = [connection_status("Direct", active_for=[])]
+    connections = [connection_status("ISP", active_for=[])]
     names = wg_map_names()
     for iface in wireguard_interfaces():
         active_for = active_by_iface.get(iface, [])
