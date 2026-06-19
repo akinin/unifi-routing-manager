@@ -195,6 +195,13 @@ button:hover {
   background: #f8fbff;
 }
 
+body.dark button:hover,
+body.dark select:hover {
+  color: var(--text);
+  border-color: #3f4f66;
+  background: #1d2735;
+}
+
 button.primary {
   background: var(--blue);
   color: #fff;
@@ -204,6 +211,12 @@ button.primary {
 button.primary:hover {
   background: var(--blue-dark);
   border-color: var(--blue-dark);
+}
+
+body.dark button.primary:hover {
+  color: #fff;
+  background: #1664b7;
+  border-color: #1664b7;
 }
 
 button.danger {

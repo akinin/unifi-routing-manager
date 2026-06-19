@@ -21,6 +21,7 @@ const icons = {
 const inlineIcons = {
   cloud: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 18H8a4 4 0 1 1 .7-7.94A5.5 5.5 0 0 1 19 12.5h.5a2.75 2.75 0 0 1 0 5.5h-2"/></svg>',
   update: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10"/><path d="m8 10 4 4 4-4"/><path d="M5 18h14"/></svg>',
+  download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>',
   route: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 18.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path d="M17.5 10.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path d="M9 16h3.5c2.2 0 4-1.8 4-4v-1.5"/></svg>',
   dns: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7.5h14"/><path d="M5 12h14"/><path d="M5 16.5h14"/><path d="M7 4.5h10c1.1 0 2 .9 2 2v11c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2v-11c0-1.1.9-2 2-2Z"/></svg>',
   refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.2 9A7 7 0 0 0 6.5 7.2L4 10"/><path d="M5.8 15A7 7 0 0 0 17.5 16.8L20 14"/></svg>',
@@ -83,8 +84,16 @@ function escapeHtml(value) {
 
 async function getJson(url, options) {
   const response = await fetch(url, options);
-  if (!response.ok) throw new Error(`Request failed: ${response.status}`);
-  return response.json();
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+  if (!response.ok) {
+    throw new Error(payload?.output || payload?.error || `Request failed: ${response.status}`);
+  }
+  return payload;
 }
 
 function renderMetrics(data) {
@@ -211,7 +220,8 @@ function renderProject(project) {
 function renderStatus(data) {
   state.status = data;
   const address = data.host === "0.0.0.0" ? `LAN access on port ${data.port}` : `${data.host}:${data.port}`;
-  $("#rootPath").textContent = `${address} · root ${data.root}`;
+  const rootPath = $("#rootPath");
+  if (rootPath) rootPath.textContent = `${address} - root ${data.root}`;
   renderMetrics(data);
   renderConnections(data);
   $("#projects").innerHTML = data.projects.map(renderProject).join("");
@@ -316,7 +326,7 @@ function enhanceButtons() {
     "dnscrypt.extract": "dns",
     "dnscrypt.generate": "route",
     "dnscrypt.restart": "refresh",
-    "icons.install": "image",
+    "icons.install": "download",
     "icons.discover": "refresh",
     "icons.uninstall": "stop",
   };
@@ -392,19 +402,31 @@ async function downloadAsset() {
 async function uploadAvatar() {
   const file = $("#avatarFile").files[0];
   if (!file) return;
-  const data = await new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.readAsDataURL(file);
-  });
-  const result = await getJson("/api/auth/avatar", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ filename: file.name, data }),
-  });
-  showToast(result.ok ? "Avatar updated" : result.output || "Failed");
-  $("#profileModal").hidden = true;
-  await checkAuth();
+  if (!["image/png", "image/jpeg"].includes(file.type)) {
+    showToast("Avatar must be PNG or JPG");
+    return;
+  }
+  if (file.size > 512 * 1024) {
+    showToast("Avatar must be smaller than 512 KB");
+    return;
+  }
+  try {
+    const data = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(file);
+    });
+    const result = await getJson("/api/auth/avatar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: file.name, data }),
+    });
+    showToast(result.ok ? "Avatar updated" : result.output || "Failed");
+    $("#profileModal").hidden = true;
+    await checkAuth();
+  } catch (error) {
+    showToast(error.message || "Avatar upload failed");
+  }
 }
 
 document.addEventListener("click", (event) => {
