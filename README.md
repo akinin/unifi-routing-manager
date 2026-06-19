@@ -11,7 +11,9 @@
 - обновляет список AWS/CloudFront сетей для UniFi Cloud;
 - генерирует DNSCrypt forwarding rules для корневых доменов UniFi;
 - патчит локальные ISP-иконки в UniFi Network UI;
+- автоматически создаёт fallback-иконки для текущих провайдеров по ASN/ISP;
 - показывает состояние и логи в Web UI на порту `8090`;
+- позволяет редактировать ручные списки доменов, сетей и WireGuard map из Web UI;
 - устанавливается в systemd и стартует после перезагрузки UDM.
 
 ## Структура
@@ -229,9 +231,15 @@ git pull
 
 ## Данные и структура
 
-Проект пока сохраняет совместимую структуру `/persistent/ubnt-cloud`, `/persistent/ubnt-updates`, `/persistent/ubnt-dnscrypt`, `/persistent/ubnt-isp-icons` и `/persistent/web`, потому что эти пути уже используются systemd-службами и текущими логами. Общая WireGuard-карта вынесена в `/persistent/wg-map.conf`, чтобы не дублировать один и тот же список туннелей.
+Рекомендуемая структура после чистой установки:
 
-Если нужен полный переезд в один каталог, например `/persistent/unifi-route-manager`, делайте его отдельной миграцией с symlink-совместимостью для старых путей.
+```text
+/persistent/unifi-route-manager
+```
+
+Для совместимости старые пути `/persistent/ubnt-cloud`, `/persistent/ubnt-updates`, `/persistent/ubnt-dnscrypt`, `/persistent/ubnt-isp-icons`, `/persistent/web`, `/persistent/wg-map.conf` и `/persistent/unifi-routing-manager.sh` могут быть symlink-ярлыками на файлы внутри `/persistent/unifi-route-manager`. Это позволяет держать проект в одном каталоге и не ломать существующие systemd-службы.
+
+Общая WireGuard-карта находится в `/persistent/wg-map.conf` и указывает на `/persistent/unifi-route-manager/wg-map.conf`.
 
 ## Диагностика
 
