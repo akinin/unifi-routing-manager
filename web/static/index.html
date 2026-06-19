@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>UniFi Routing</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="mark"><img src="/assets/brand/u-logo.svg" alt="Ubiquiti"></div>
+        <div>
+          <strong>Routing</strong>
+          <span>Local Console</span>
+        </div>
+      </div>
+      <nav>
+        <a class="active" href="#overview">Overview</a>
+        <a href="#cloud">Cloud</a>
+        <a href="#updates">Updates</a>
+        <a href="#dnscrypt">DNSCrypt</a>
+        <a href="#logs">Logs</a>
+      </nav>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <h1>UniFi Routing Manager</h1>
+          <p id="rootPath">Loading local state...</p>
+        </div>
+        <button class="primary" id="refreshBtn" type="button">Refresh</button>
+      </header>
+
+      <section class="metrics" id="overview"></section>
+
+      <section class="grid" id="projects"></section>
+
+      <section class="panel" id="dnscrypt">
+        <div class="panel-head">
+          <div>
+            <h2>DNSCrypt</h2>
+            <p>Forwarding rules generated from UniFi domains.</p>
+          </div>
+          <div class="actions">
+            <button data-action="dnscrypt.update">Update</button>
+            <button data-action="dnscrypt.extract">Extract</button>
+            <button data-action="dnscrypt.generate">Generate</button>
+            <button data-action="dnscrypt.restart">Restart</button>
+          </div>
+        </div>
+        <div class="kv" id="dnscryptStatus"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>ISP Icons</h2>
+            <p>Local icon patch state.</p>
+          </div>
+          <button data-action="icons.install">Install</button>
+        </div>
+        <div class="kv" id="iconsStatus"></div>
+      </section>
+
+      <section class="panel" id="logs">
+        <div class="panel-head">
+          <div>
+            <h2>Logs</h2>
+            <p>Latest entries from local project logs.</p>
+          </div>
+          <select id="logTarget">
+            <option value="cloud">Cloud</option>
+            <option value="updates">Updates</option>
+            <option value="dnscrypt">DNSCrypt</option>
+            <option value="icons">ISP Icons</option>
+          </select>
+        </div>
+        <pre id="logBox">Loading logs...</pre>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" hidden></div>
+    <script src="/app.js"></script>
+  </body>
+</html>

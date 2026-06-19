@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+
+*.log
+*.bak
+*.bak.*
+*.tmp
+
+*/active-iface
+*/active-name
+*/active-table
+
+unifi-routing-backup-*.tar.gz
