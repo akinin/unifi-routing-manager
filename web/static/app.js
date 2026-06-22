@@ -25,6 +25,7 @@ const inlineIcons = {
   edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4 11.5-11.5Z"/></svg>',
   imagePlus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5z"/><path d="m5 15 4-4 3 3 2-2 5 5"/><path d="M16 4v6"/><path d="M13 7h6"/></svg>',
   flag: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4"/><path d="M5 5h11l-1 4 1 4H5"/></svg>',
+  globe: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.4 2.4 3.6 5.4 3.6 9S14.4 18.6 12 21"/><path d="M12 3c-2.4 2.4-3.6 5.4-3.6 9S9.6 18.6 12 21"/></svg>',
   moon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a7 7 0 1 0 11 11Z"/></svg>',
   sun: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>',
   chevronDown: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
@@ -180,6 +181,19 @@ function eventLine(event, fallback) {
   return `${escapeHtml(event.message || fallback || "No recent activity")}${time}`;
 }
 
+function eventTime(event, fallback) {
+  if (event?.time) return escapeHtml(event.time);
+  const text = String(fallback || "");
+  const match = text.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
+  return match ? escapeHtml(match[0]) : "No recent activity";
+}
+
+function statusDot(value) {
+  const text = String(value || "").toLowerCase();
+  const ok = ["active", "enabled", "configured"].includes(text) || Number(value) > 0;
+  return `<span class="status-dot ${ok ? "ok" : "bad"}" title="${escapeHtml(String(value || "unknown"))}"></span>`;
+}
+
 function renderProject(project) {
   const sampleHtml = Object.entries(project.samples || {})
     .map(([label, values]) => {
@@ -235,23 +249,34 @@ function renderStatus(data) {
   renderConnections(data);
   $("#projects").innerHTML = data.projects.map(renderProject).join("");
 
+  $("#dnscryptTitle").innerHTML = `
+    ${icon("dns")}
+    <div>
+      <h2>${statusDot(data.dnscrypt.service)}DNSCrypt</h2>
+      <p class="event">${eventTime(data.dnscrypt.lastEvent, data.dnscrypt.lastLog)}</p>
+    </div>
+  `;
+
   $("#dnscryptStatus").innerHTML = `
-    <div><span>Forwarding state</span><strong>${badge(data.dnscrypt.service)}</strong></div>
-    <div><span>Timer</span><strong>${badge(data.dnscrypt.timer)}</strong></div>
-    <div><span>Enabled</span><strong>${badge(data.dnscrypt.enabled)}</strong></div>
     <div><span>Domains</span><strong>${escapeHtml(data.dnscrypt.domains)}</strong></div>
     <div><span>Forwarding</span><strong>${escapeHtml(data.dnscrypt.forwarding)}</strong></div>
     <div><span>DNS route</span><strong>${escapeHtml(data.dnscrypt.route?.name || data.dnscrypt.route?.iface || "unknown")}</strong></div>
-    <div><span>Last activity</span><strong class="event-compact">${eventLine(data.dnscrypt.lastEvent, data.dnscrypt.lastLog)}</strong></div>
   `;
   $("#dnscryptDomains").innerHTML = (data.dnscrypt.samples || [])
     .map((value) => `<code>${escapeHtml(value)}</code>`)
     .join("") || "<p>No domains</p>";
 
+  $("#iconsTitle").innerHTML = `
+    ${icon("globe")}
+    <div>
+      <h2>${statusDot(data.ispIcons.icons)}ISP Icons</h2>
+      <p class="event">${eventTime(data.ispIcons.lastEvent, data.ispIcons.lastLog)}</p>
+    </div>
+  `;
+
   $("#iconsStatus").innerHTML = `
-    <div><span>Directory</span><strong>${badge(data.ispIcons.exists ? "configured" : "not configured")}</strong></div>
+    <div><span>Status</span><strong>${badge(data.ispIcons.exists ? "configured" : "not configured")}</strong></div>
     <div><span>Icons</span><strong>${escapeHtml(data.ispIcons.icons)}</strong></div>
-    <div><span>Last activity</span><strong class="event-compact">${eventLine(data.ispIcons.lastEvent, data.ispIcons.lastLog)}</strong></div>
   `;
   $("#iconsList").innerHTML = (data.ispIcons.items || [])
     .map((item) => `<article class="isp-icon-item"><img src="${escapeHtml(item.url)}" alt=""><span>${escapeHtml(item.name)}</span></article>`)
@@ -368,7 +393,7 @@ function enhanceButtons() {
 
   document.querySelectorAll("button[data-open-download].icon-button").forEach((button) => {
     if (button.querySelector(".icon")) return;
-    button.innerHTML = icon(button.dataset.openDownload === "country" ? "flag" : "imagePlus");
+    button.innerHTML = icon(button.dataset.openDownload === "country" ? "flag" : "globe");
   });
 
   const refreshBtn = $("#refreshBtn");

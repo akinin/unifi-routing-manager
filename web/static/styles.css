@@ -325,12 +325,14 @@ textarea {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
   align-items: stretch;
+  margin-bottom: 18px;
 }
 
 .ops-grid > .panel {
   height: 100%;
   display: flex;
   flex-direction: column;
+  margin-bottom: 0;
 }
 
 .ops-grid .kv {
@@ -372,6 +374,42 @@ textarea {
   border-radius: 8px;
   background: #eef5ff;
   padding: 9px;
+}
+
+.title-row h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 3px rgba(109, 122, 140, 0.12);
+}
+
+.status-dot.ok {
+  background: var(--green);
+}
+
+.status-dot.bad {
+  background: var(--red);
+}
+
+body.dark .status-dot.ok {
+  background: #76d6a5;
+}
+
+body.dark .status-dot.bad {
+  background: #e58a94;
+}
+
+.panel-head > p,
+.panel-head > div > p {
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .event {
@@ -777,14 +815,14 @@ pre {
   width: 42px;
   height: 42px;
   border-radius: 8px;
-  color: #2468a8;
+  color: #2f6f9f;
   background: #edf3f8;
   padding: 10px;
 }
 
 body.dark .metric .icon,
 body.dark .title-row .icon {
-  color: #8fbbe6;
+  color: #82a9cf;
   background: #1b2633;
 }
 
@@ -867,8 +905,15 @@ input {
 .metric .icon.brand-mark,
 .title-row .icon.brand-mark {
   color: #fff;
-  background: var(--blue);
-  border: 1px solid var(--blue);
+  background: #276fa8;
+  border: 1px solid #276fa8;
+}
+
+body.dark .icon.brand-mark,
+body.dark .metric .icon.brand-mark,
+body.dark .title-row .icon.brand-mark {
+  background: #1b2633;
+  border-color: #2b3545;
 }
 
 .icon.brand-mark img,
@@ -942,7 +987,6 @@ input {
     width: 100%;
   }
 
-  .metrics,
   .grid,
   .ops-grid,
   .editor-grid,
@@ -950,6 +994,27 @@ input {
   .connection,
   .status-row {
     grid-template-columns: 1fr;
+  }
+
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .metric {
+    padding: 12px;
+    gap: 9px;
+  }
+
+  .metric .icon {
+    width: 34px;
+    height: 34px;
+    padding: 8px;
+  }
+
+  .metric strong {
+    margin-top: 4px;
+    font-size: 16px;
   }
 
   .status-cell,
