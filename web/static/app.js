@@ -106,24 +106,6 @@ async function getJson(url, options) {
   return payload;
 }
 
-function renderMetrics(data) {
-  const cloud = data.projects.find((item) => item.key === "cloud");
-  const updates = data.projects.find((item) => item.key === "updates");
-  const totalRules = [cloud?.rules, updates?.rules]
-    .map((value) => Number(value))
-    .filter(Number.isFinite)
-    .reduce((sum, value) => sum + value, 0);
-
-  $("#overview").innerHTML = [
-    ["cloud", "Cloud", cloud?.activeName || "unknown"],
-    ["update", "Updates", updates?.activeName || "unknown"],
-    ["route", "Policy rules", totalRules || "unknown"],
-    ["dns", "DNSCrypt", data.dnscrypt.service || "unknown"],
-  ]
-    .map(([iconName, label, value]) => `<article class="metric">${icon(iconName)}<div><span>${label}</span><strong>${escapeHtml(value)}</strong></div></article>`)
-    .join("");
-}
-
 function renderConnections(data) {
   const connections = (data.connections || []).filter((item) => item.ip && item.ip !== "N/A");
   $("#connectionsList").innerHTML = connections.length
@@ -147,7 +129,7 @@ function renderConnections(data) {
           return `
             <article class="connection ${item.active ? "active" : ""}">
               <div class="connection-title">
-                ${icon(item.iface ? "wireguard" : "route")}
+                ${icon(item.iface ? "wireguard" : "globe")}
                 <div><strong>${title}</strong>${active}</div>
               </div>
               <div><strong>${escapeHtml(item.ip)}</strong></div>
@@ -191,7 +173,9 @@ function eventTime(event, fallback) {
 
 function compactEvent(label, event, fallback) {
   const time = eventTime(event, fallback);
-  return `${escapeHtml(label)}${time !== "No recent activity" ? ` · ${time}` : ""}`;
+  const safeLabel = escapeHtml(label || "");
+  if (time === "No recent activity") return safeLabel || time;
+  return safeLabel ? `${safeLabel} - ${time}` : time;
 }
 
 function statusDot(value) {
@@ -225,14 +209,18 @@ function renderProject(project) {
 
   const projectIcon = project.key === "cloud" ? "cloud" : "update";
   const active = isActiveState(project.timer);
+  const projectEvent = compactEvent("", project.lastEvent, project.lastLog);
+  const projectSubtitle = [project.activeName || "not configured", projectEvent]
+    .filter((value) => value && value !== "unknown")
+    .join(" - ");
   return `
     <section class="panel" id="${project.key}">
       <div class="panel-head">
         <div class="title-row">
-          ${icon(projectIcon)}
+            ${icon(projectIcon)}
           <div>
             <h2>${statusDot(project.timer)}${escapeHtml(project.title)}</h2>
-            <p class="event">${escapeHtml(project.activeName || "not configured")}</p>
+            <p class="event">${escapeHtml(projectSubtitle || "not configured")}</p>
           </div>
         </div>
         <div class="actions">
@@ -257,7 +245,6 @@ function renderStatus(data) {
   const address = data.host === "0.0.0.0" ? `LAN access on port ${data.port}` : `${data.host}:${data.port}`;
   const rootPath = $("#rootPath");
   if (rootPath) rootPath.textContent = `${address} - root ${data.root}`;
-  renderMetrics(data);
   renderConnections(data);
   $("#projects").innerHTML = data.projects.map(renderProject).join("");
 
@@ -270,6 +257,7 @@ function renderStatus(data) {
   `;
 
   $("#dnscryptStatus").innerHTML = `
+    <div><span>Timer</span><strong>${badge(data.dnscrypt.timer)}</strong></div>
     <div><span>Domains</span><strong>${escapeHtml(data.dnscrypt.domains)}</strong></div>
     <div><span>DNS route</span><strong>${escapeHtml(data.dnscrypt.route?.name || data.dnscrypt.route?.iface || "unknown")}</strong></div>
   `;
@@ -278,10 +266,10 @@ function renderStatus(data) {
     .join("") || "<p>No domains</p>";
 
   $("#iconsTitle").innerHTML = `
-    ${icon("globe")}
+      ${icon("globe")}
     <div>
       <h2>${statusDot(data.ispIcons.icons)}ISP Icons</h2>
-      <p class="event">${compactEvent("Local icon patch state", data.ispIcons.lastEvent, data.ispIcons.lastLog)}</p>
+      <p class="event">${compactEvent("Local icon", data.ispIcons.lastEvent, data.ispIcons.lastLog)}</p>
     </div>
   `;
 

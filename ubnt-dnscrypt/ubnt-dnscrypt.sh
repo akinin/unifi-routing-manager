@@ -8,6 +8,7 @@ UPDATES_DIR="$PROJECT_ROOT/ubnt-updates"
 DOMAINS_FILE="$BASE/domains.txt"
 FORWARDING_FILE="/run/dnscrypt-forwarding.txt"
 RESOLVER="1.1.1.1"
+DNS_PRIO="120"
 
 LOG="$BASE/ubnt-dnscrypt.log"
 LOCK="/tmp/ubnt-dnscrypt.lock"
@@ -24,6 +25,49 @@ ensure_files() {
 
 list_entries() {
   grep -v '^[[:space:]]*#' "$1" 2>/dev/null | sed '/^[[:space:]]*$/d'
+}
+
+cleanup_dns_route() {
+  while :; do
+    line="$(ip rule show | sed -n "/^$DNS_PRIO:/p" | sed -n '1p')"
+    [ -z "$line" ] && break
+
+    rule="$(echo "$line" | sed "s/^$DNS_PRIO:[[:space:]]*//")"
+    log "delete dns route rule: $rule"
+    ip rule del $rule >/dev/null 2>&1 || break
+  done
+}
+
+select_dns_route() {
+  for dir in "$CLOUD_DIR" "$UPDATES_DIR"; do
+    table="$(cat "$dir/active-table" 2>/dev/null || true)"
+    iface="$(cat "$dir/active-iface" 2>/dev/null || true)"
+
+    [ -n "$table" ] || continue
+    [ "$table" != "unknown" ] || continue
+    [ -n "$iface" ] || continue
+    [ "$iface" != "unknown" ] || continue
+
+    echo "$table|$iface"
+    return 0
+  done
+
+  return 1
+}
+
+apply_dns_route() {
+  route="$(select_dns_route || true)"
+  cleanup_dns_route
+
+  if [ -z "$route" ]; then
+    log "dns route: no active WireGuard table"
+    return 0
+  fi
+
+  table="${route%%|*}"
+  iface="${route#*|}"
+  ip rule add to "$RESOLVER/32" lookup "$table" priority "$DNS_PRIO" >/dev/null 2>&1 || true
+  log "dns route: $RESOLVER via $table ($iface)"
 }
 
 root_domain() {
@@ -69,6 +113,7 @@ generate_forwarding() {
     log "forward $root -> $RESOLVER"
   done
 
+  apply_dns_route
   log "generated $(wc -l < "$FORWARDING_FILE") rules -> $FORWARDING_FILE"
 }
 
@@ -131,11 +176,15 @@ main() {
       restart_dnscrypt || true
       summary
       ;;
+    stop)
+      cleanup_dns_route
+      summary
+      ;;
     update|"")
       update_all
       ;;
     *)
-      echo "Usage: $0 [extract|generate|restart|update]" >&2
+      echo "Usage: $0 [extract|generate|restart|stop|update]" >&2
       exit 2
       ;;
   esac

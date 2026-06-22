@@ -795,10 +795,11 @@ def action_command(action):
         "dnscrypt.update": [["sh", str(DNSCRYPT["script"]), "update"]],
         "dnscrypt.extract": [["sh", str(DNSCRYPT["script"]), "extract"]],
         "dnscrypt.generate": [["sh", str(DNSCRYPT["script"]), "generate"]],
-        "dnscrypt.restart": [["sh", str(DNSCRYPT["script"]), "restart"]],
+        "dnscrypt.restart": [["sh", str(DNSCRYPT["script"]), "update"]],
         "dnscrypt.stop": [
             ["systemctl", "stop", "ubnt-dnscrypt.timer"],
             ["systemctl", "disable", "ubnt-dnscrypt.timer"],
+            ["sh", str(DNSCRYPT["script"]), "stop"],
         ],
         "icons.install": [["sh", str(ISP_ICONS["script"])]],
         "icons.uninstall": [["sh", str(ISP_ICONS["script"]), "uninstall"]],

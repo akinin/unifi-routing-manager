@@ -1015,7 +1015,6 @@ body.dark .title-row .icon.brand-mark {
   .ops-grid,
   .editor-grid,
   .kv,
-  .connection,
   .status-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1046,8 +1045,7 @@ body.dark .title-row .icon.brand-mark {
 
   .grid,
   .ops-grid,
-  .editor-grid,
-  .connection {
+  .editor-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1056,44 +1054,54 @@ body.dark .title-row .icon.brand-mark {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .metric {
-    padding: 12px;
-    gap: 9px;
-  }
-
-  .metric .icon {
-    width: 34px;
-    height: 34px;
-    padding: 8px;
-  }
-
-  .metric strong {
-    margin-top: 4px;
-    font-size: 16px;
-  }
-
   .status-cell,
   .kv div {
     border-bottom: 1px solid var(--line-soft);
   }
 
   .connections-list {
-    overflow-x: auto;
+    overflow-x: visible;
   }
 
   .connection {
-    min-width: 680px;
-    grid-template-columns: minmax(150px, 1.15fr) repeat(3, minmax(120px, 1fr));
+    min-width: 0;
+    grid-template-columns: minmax(88px, 1.15fr) minmax(70px, 0.85fr) minmax(66px, 0.75fr) minmax(86px, 1fr);
   }
 
   .connection > div {
+    padding: 9px 7px;
     border-right: 1px solid var(--line-soft);
     border-bottom: 1px solid var(--line-soft);
+  }
+
+  .connection.header {
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+
+  .connection-title {
+    gap: 6px;
+  }
+
+  .connection-title .icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  .connection-title strong span,
+  .connection strong {
+    font-size: 11px;
+  }
+
+  .provider-inline,
+  .flag {
+    width: 18px;
+    height: 18px;
+  }
+
+  .active-pill {
+    padding: 3px 5px;
+    font-size: 10px;
   }
 
   .kv div:nth-child(2n),

@@ -3,7 +3,7 @@
 set -eu
 
 APP="/usr/lib/unifi/webapps/ROOT/app-unifi"
-BASE="/persistent/ubnt-isp-icons"
+BASE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 INSTALL="$BASE/install.sh"
 LOG="$BASE/systemd-install.log"
 

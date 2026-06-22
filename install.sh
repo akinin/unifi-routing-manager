@@ -142,9 +142,7 @@ install_shared_wg_map() {
   shared_map="$PROJECT_ROOT/wg-map.conf"
   [ -f "$shared_map" ] && return 0
 
-  if [ -f "/persistent/wg-map.conf" ]; then
-    cp "/persistent/wg-map.conf" "$shared_map"
-  elif [ -f "$PROJECT_ROOT/ubnt-cloud/wg-map.conf" ]; then
+  if [ -f "$PROJECT_ROOT/ubnt-cloud/wg-map.conf" ]; then
     cp "$PROJECT_ROOT/ubnt-cloud/wg-map.conf" "$shared_map"
   elif [ -f "$PROJECT_ROOT/ubnt-updates/wg-map.conf" ]; then
     cp "$PROJECT_ROOT/ubnt-updates/wg-map.conf" "$shared_map"
@@ -158,11 +156,6 @@ install_shared_wg_map() {
 configure_wg_map() {
   shared_map="$PROJECT_ROOT/wg-map.conf"
   [ -f "$shared_map" ] && return 0
-  if [ -f "/persistent/wg-map.conf" ]; then
-    cp "/persistent/wg-map.conf" "$shared_map"
-    chmod 644 "$shared_map"
-    return 0
-  fi
 
   echo "Enter WireGuard map rows. Format: <table> <iface> <name>"
   echo "Example: 180.wgclt7 wgclt7 WG-DE"

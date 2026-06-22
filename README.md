@@ -33,16 +33,6 @@ UniFi Route Manager помогает на UDM Pro направлять траф�
 
 Для совместимости создаются symlink-пути:
 
-```text
-/persistent/ubnt-cloud -> /persistent/unifi-route-manager/ubnt-cloud
-/persistent/ubnt-updates -> /persistent/unifi-route-manager/ubnt-updates
-/persistent/ubnt-dnscrypt -> /persistent/unifi-route-manager/ubnt-dnscrypt
-/persistent/ubnt-isp-icons -> /persistent/unifi-route-manager/ubnt-isp-icons
-/persistent/web -> /persistent/unifi-route-manager/web
-/persistent/wg-map.conf -> /persistent/unifi-route-manager/wg-map.conf
-/persistent/unifi-routing-manager.sh -> /persistent/unifi-route-manager/unifi-routing-manager.sh
-```
-
 ## Требования
 
 - UniFi UDM Pro / UniFi OS.
@@ -183,21 +173,21 @@ journalctl -u unifi-routing-web.service -n 100 --no-pager
 
 ```sh
 ip rule show | grep -E '^(100|110):'
-tail -100 /persistent/ubnt-cloud/ubnt-cloud-routes.log
-tail -100 /persistent/ubnt-updates/ubnt-updates-routes.log
+tail -100 /persistent/unifi-route-manager/ubnt-cloud/ubnt-cloud-routes.log
+tail -100 /persistent/unifi-route-manager/ubnt-updates/ubnt-updates-routes.log
 ```
 
 Проверить DNSCrypt:
 
 ```sh
-tail -100 /persistent/ubnt-dnscrypt/ubnt-dnscrypt.log
+tail -100 /persistent/unifi-route-manager/ubnt-dnscrypt/ubnt-dnscrypt.log
 cat /run/dnscrypt-forwarding.txt
 ```
 
 Проверить ISP Icons:
 
 ```sh
-tail -100 /persistent/ubnt-isp-icons/systemd-install.log
+tail -100 /persistent/unifi-route-manager/ubnt-isp-icons/systemd-install.log
 ls -la /usr/lib/unifi/webapps/ROOT/app-unifi/react/images/topology/isp/asn
 ```
 

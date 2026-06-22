@@ -3,7 +3,7 @@
 set -eu
 
 PROJECT="ubnt-isp-icons"
-SRC="/persistent/ubnt-isp-icons"
+SRC="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 APP="/usr/lib/unifi/webapps/ROOT/app-unifi"
 ASN_DIR="$APP/react/images/topology/isp/asn"
 ISP_DIR="$APP/react/images/topology/isp/name"

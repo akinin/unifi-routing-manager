@@ -19,10 +19,12 @@ clear_screen() {
 }
 
 # Пути к проектам
-CLOUD_DIR="/persistent/ubnt-cloud"
-UPDATES_DIR="/persistent/ubnt-updates"
-DNSCRYPT_DIR="/persistent/ubnt-dnscrypt"
-ISP_ICONS_DIR="/persistent/ubnt-isp-icons"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+PROJECT_ROOT="${UNIFI_ROUTING_ROOT:-$SCRIPT_DIR}"
+CLOUD_DIR="$PROJECT_ROOT/ubnt-cloud"
+UPDATES_DIR="$PROJECT_ROOT/ubnt-updates"
+DNSCRYPT_DIR="$PROJECT_ROOT/ubnt-dnscrypt"
+ISP_ICONS_DIR="$PROJECT_ROOT/ubnt-isp-icons"
 
 # Кэш для IP и геолокации
 CACHE_DIR="/tmp/unifi-routing-cache"
@@ -747,13 +749,13 @@ create_backup() {
   local backup_file="/persistent/unifi-routing-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
   
   tar czf "$backup_file" \
-    /persistent/ubnt-cloud \
-    /persistent/ubnt-updates \
-    /persistent/ubnt-dnscrypt \
-    /persistent/ubnt-isp-icons \
+    "$CLOUD_DIR" \
+    "$UPDATES_DIR" \
+    "$DNSCRYPT_DIR" \
+    "$ISP_ICONS_DIR" \
     /etc/systemd/system/ubnt-cloud-routes.* \
     /etc/systemd/system/ubnt-updates-routes.* \
-    /persistent/unifi-routing-manager.sh \
+    "$PROJECT_ROOT/unifi-routing-manager.sh" \
     2>&1 | sed 's/^/  /'
   
   echo ""
