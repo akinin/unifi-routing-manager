@@ -247,6 +247,28 @@ button.danger {
   color: var(--red);
 }
 
+button.state-ok {
+  color: var(--green);
+  border-color: rgba(39, 162, 105, 0.4);
+  background: rgba(39, 162, 105, 0.08);
+}
+
+button.state-bad {
+  color: var(--red);
+  border-color: rgba(212, 77, 92, 0.45);
+  background: rgba(212, 77, 92, 0.08);
+}
+
+body.dark button.state-ok {
+  color: #76d6a5;
+  background: rgba(118, 214, 165, 0.1);
+}
+
+body.dark button.state-bad {
+  color: #e58a94;
+  background: rgba(229, 138, 148, 0.1);
+}
+
 select {
   min-width: 150px;
   padding: 0 10px;
@@ -278,6 +300,13 @@ textarea {
 
 .grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid > .panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0;
 }
 
 .metric,
@@ -469,6 +498,7 @@ body.dark .status-dot.bad {
 .kv {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .connections-list {
@@ -901,6 +931,33 @@ input {
   font: inherit;
 }
 
+input[type="file"] {
+  height: auto;
+  padding: 8px;
+}
+
+input[type="file"]::file-selector-button {
+  height: 32px;
+  margin-right: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+input[type="file"]::file-selector-button:hover {
+  border-color: #b7c5d8;
+  background: #f8fbff;
+}
+
+body.dark input[type="file"]::file-selector-button:hover {
+  border-color: #3f4f66;
+  background: #1d2735;
+}
+
 .icon.brand-mark,
 .metric .icon.brand-mark,
 .title-row .icon.brand-mark {
@@ -980,20 +1037,23 @@ body.dark .title-row .icon.brand-mark {
   .actions {
     grid-auto-flow: row;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    width: 100%;
+    width: auto;
   }
 
   .actions button {
-    width: 100%;
+    width: auto;
   }
 
   .grid,
   .ops-grid,
   .editor-grid,
-  .kv,
-  .connection,
-  .status-row {
+  .connection {
     grid-template-columns: 1fr;
+  }
+
+  .kv,
+  .status-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .metrics {
@@ -1018,14 +1078,28 @@ body.dark .title-row .icon.brand-mark {
   }
 
   .status-cell,
-  .kv div,
-  .connection > div {
-    border-right: 0;
+  .kv div {
     border-bottom: 1px solid var(--line-soft);
   }
 
+  .connections-list {
+    overflow-x: auto;
+  }
+
+  .connection {
+    min-width: 680px;
+    grid-template-columns: minmax(150px, 1.15fr) repeat(3, minmax(120px, 1fr));
+  }
+
+  .connection > div {
+    border-right: 1px solid var(--line-soft);
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .kv div:nth-child(2n),
+  .status-cell:nth-child(2n),
   .connection > div:last-child {
-    border-bottom: 0;
+    border-right: 0;
   }
 
   .toast {

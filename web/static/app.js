@@ -61,8 +61,9 @@ function providerIcon(item) {
   return `<span class="icon provider-mark fallback">${escapeHtml(text)}</span>`;
 }
 
-function actionButton(action, label, iconName, danger = false) {
-  return `<button class="${danger ? "danger" : ""}" data-action="${action}">${icon(iconName)}<span>${label}</span></button>`;
+function actionButton(action, label, iconName, options = {}) {
+  const classes = [options.danger ? "danger" : "", options.state || ""].filter(Boolean).join(" ");
+  return `<button class="${classes}" data-action="${action}">${icon(iconName)}<span>${label}</span></button>`;
 }
 
 const editorLabels = {
@@ -188,10 +189,26 @@ function eventTime(event, fallback) {
   return match ? escapeHtml(match[0]) : "No recent activity";
 }
 
+function compactEvent(label, event, fallback) {
+  const time = eventTime(event, fallback);
+  return `${escapeHtml(label)}${time !== "No recent activity" ? ` · ${time}` : ""}`;
+}
+
 function statusDot(value) {
   const text = String(value || "").toLowerCase();
   const ok = ["active", "enabled", "configured"].includes(text) || Number(value) > 0;
   return `<span class="status-dot ${ok ? "ok" : "bad"}" title="${escapeHtml(String(value || "unknown"))}"></span>`;
+}
+
+function isActiveState(value) {
+  return String(value || "").toLowerCase() === "active";
+}
+
+function setActionState(action, state) {
+  const button = document.querySelector(`button[data-action="${action}"]`);
+  if (!button) return;
+  button.classList.remove("state-ok", "state-bad");
+  if (state) button.classList.add(state);
 }
 
 function renderProject(project) {
@@ -207,31 +224,26 @@ function renderProject(project) {
     .join("");
 
   const projectIcon = project.key === "cloud" ? "cloud" : "update";
+  const active = isActiveState(project.timer);
   return `
     <section class="panel" id="${project.key}">
       <div class="panel-head">
         <div class="title-row">
           ${icon(projectIcon)}
           <div>
-            <h2>${escapeHtml(project.title)}</h2>
-            <p class="event">${eventLine(project.lastEvent, project.lastLog)}</p>
+            <h2>${statusDot(project.timer)}${escapeHtml(project.title)}</h2>
+            <p class="event">${escapeHtml(project.activeName || "not configured")}</p>
           </div>
         </div>
         <div class="actions">
-          ${actionButton(`${project.key}.start`, "Start", "play")}
+          ${actionButton(`${project.key}.start`, "Start", "play", { state: active ? "state-ok" : "" })}
           ${actionButton(`${project.key}.restart`, "Restart", "refresh")}
-          ${actionButton(`${project.key}.stop`, "Stop", "stop", true)}
+          ${actionButton(`${project.key}.stop`, "Stop", "stop", { danger: true, state: active ? "" : "state-bad" })}
         </div>
       </div>
       <div class="status-row">
-        <div class="status-cell"><span>Status</span><strong>${badge(project.configured ? "configured" : "not configured")}</strong></div>
-        <div class="status-cell"><span>WG</span><strong>${escapeHtml(project.activeName)}</strong></div>
-        <div class="status-cell"><span>Interface</span><strong>${escapeHtml(project.activeIface)}</strong></div>
         <div class="status-cell"><span>Table</span><strong>${escapeHtml(project.activeTable)}</strong></div>
-      </div>
-      <div class="status-row">
         <div class="status-cell"><span>Timer</span><strong>${badge(project.timer)}</strong></div>
-        <div class="status-cell"><span>Enabled</span><strong>${badge(project.enabled)}</strong></div>
         <div class="status-cell"><span>Rules</span><strong>${escapeHtml(project.rules)}</strong></div>
         <div class="status-cell"><span>Entries</span><strong>${escapeHtml(Object.values(project.counts || {}).join(" / ") || "0")}</strong></div>
       </div>
@@ -253,13 +265,12 @@ function renderStatus(data) {
     ${icon("dns")}
     <div>
       <h2>${statusDot(data.dnscrypt.service)}DNSCrypt</h2>
-      <p class="event">${eventTime(data.dnscrypt.lastEvent, data.dnscrypt.lastLog)}</p>
+      <p class="event">${compactEvent("Forwarding rules", data.dnscrypt.lastEvent, data.dnscrypt.lastLog)}</p>
     </div>
   `;
 
   $("#dnscryptStatus").innerHTML = `
     <div><span>Domains</span><strong>${escapeHtml(data.dnscrypt.domains)}</strong></div>
-    <div><span>Forwarding</span><strong>${escapeHtml(data.dnscrypt.forwarding)}</strong></div>
     <div><span>DNS route</span><strong>${escapeHtml(data.dnscrypt.route?.name || data.dnscrypt.route?.iface || "unknown")}</strong></div>
   `;
   $("#dnscryptDomains").innerHTML = (data.dnscrypt.samples || [])
@@ -270,17 +281,24 @@ function renderStatus(data) {
     ${icon("globe")}
     <div>
       <h2>${statusDot(data.ispIcons.icons)}ISP Icons</h2>
-      <p class="event">${eventTime(data.ispIcons.lastEvent, data.ispIcons.lastLog)}</p>
+      <p class="event">${compactEvent("Local icon patch state", data.ispIcons.lastEvent, data.ispIcons.lastLog)}</p>
     </div>
   `;
 
   $("#iconsStatus").innerHTML = `
-    <div><span>Status</span><strong>${badge(data.ispIcons.exists ? "configured" : "not configured")}</strong></div>
     <div><span>Icons</span><strong>${escapeHtml(data.ispIcons.icons)}</strong></div>
+    <div><span>Timer</span><strong>${badge(data.ispIcons.exists ? "active" : "inactive")}</strong></div>
   `;
   $("#iconsList").innerHTML = (data.ispIcons.items || [])
     .map((item) => `<article class="isp-icon-item"><img src="${escapeHtml(item.url)}" alt=""><span>${escapeHtml(item.name)}</span></article>`)
     .join("") || "<p>No icons</p>";
+
+  const dnsActive = isActiveState(data.dnscrypt.service);
+  setActionState("dnscrypt.start", dnsActive ? "state-ok" : "");
+  setActionState("dnscrypt.stop", dnsActive ? "" : "state-bad");
+  const iconsActive = Boolean(data.ispIcons.exists && Number(data.ispIcons.icons) > 0);
+  setActionState("icons.install", iconsActive ? "state-ok" : "");
+  setActionState("icons.uninstall", iconsActive ? "" : "state-bad");
 }
 
 async function loadEditors() {
@@ -370,11 +388,13 @@ function renderLogToggle() {
 
 function enhanceButtons() {
   const actionIcons = {
+    "dnscrypt.start": "play",
     "dnscrypt.update": "refresh",
     "dnscrypt.extract": "dns",
     "dnscrypt.generate": "route",
     "dnscrypt.restart": "refresh",
-    "icons.install": "download",
+    "dnscrypt.stop": "stop",
+    "icons.install": "play",
     "icons.discover": "refresh",
     "icons.uninstall": "stop",
   };

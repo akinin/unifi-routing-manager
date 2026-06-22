@@ -63,14 +63,10 @@
         <section class="panel" id="dnscrypt">
           <div class="panel-head">
             <div class="title-row" id="dnscryptTitle"></div>
-            <div>
-              <p>Forwarding rules</p>
-            </div>
             <div class="actions">
-              <button data-action="dnscrypt.update">Update</button>
-              <button data-action="dnscrypt.extract">Extract</button>
-              <button data-action="dnscrypt.generate">Generate</button>
+              <button data-action="dnscrypt.start">Start</button>
               <button data-action="dnscrypt.restart">Restart</button>
+              <button class="danger" data-action="dnscrypt.stop">Stop</button>
             </div>
           </div>
           <div class="kv" id="dnscryptStatus"></div>
@@ -86,11 +82,10 @@
         <section class="panel" id="isp-icons">
           <div class="panel-head">
             <div class="title-row" id="iconsTitle"></div>
-            <p>Local icon patch state.</p>
             <div class="actions">
-              <button data-action="icons.discover">Discover</button>
-              <button data-action="icons.install">Install</button>
-              <button class="danger" data-action="icons.uninstall">Uninstall</button>
+              <button data-action="icons.discover">Update</button>
+              <button data-action="icons.install">Start</button>
+              <button class="danger" data-action="icons.uninstall">Stop</button>
             </div>
           </div>
           <div class="kv" id="iconsStatus"></div>

@@ -787,10 +787,19 @@ def action_command(action):
             ["systemctl", "stop", "ubnt-updates-routes.service"],
             ["sh", "-lc", "ip rule show | grep '^110:' | while read -r line; do rule=$(echo \"$line\" | sed 's/^[0-9]\\+:[[:space:]]*//'); ip rule del $rule 2>/dev/null || true; done"],
         ],
+        "dnscrypt.start": [
+            ["systemctl", "enable", "ubnt-dnscrypt.timer"],
+            ["systemctl", "start", "ubnt-dnscrypt.timer"],
+            ["sh", str(DNSCRYPT["script"]), "update"],
+        ],
         "dnscrypt.update": [["sh", str(DNSCRYPT["script"]), "update"]],
         "dnscrypt.extract": [["sh", str(DNSCRYPT["script"]), "extract"]],
         "dnscrypt.generate": [["sh", str(DNSCRYPT["script"]), "generate"]],
         "dnscrypt.restart": [["sh", str(DNSCRYPT["script"]), "restart"]],
+        "dnscrypt.stop": [
+            ["systemctl", "stop", "ubnt-dnscrypt.timer"],
+            ["systemctl", "disable", "ubnt-dnscrypt.timer"],
+        ],
         "icons.install": [["sh", str(ISP_ICONS["script"])]],
         "icons.uninstall": [["sh", str(ISP_ICONS["script"]), "uninstall"]],
     }
