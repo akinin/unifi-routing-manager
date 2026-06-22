@@ -5,9 +5,82 @@ const state = {
   editorKey: "",
   downloadKind: "",
   autoTimer: null,
+  lang: "en",
 };
 
 const $ = (selector) => document.querySelector(selector);
+
+const translations = {
+  en: {
+    refresh: "Refresh",
+    autoOff: "Auto off",
+    connections: "Connections",
+    connectionsText: "External IP, country and provider for direct access and WireGuard tunnels.",
+    start: "Start",
+    restart: "Restart",
+    stop: "Stop",
+    update: "Update",
+    table: "Table",
+    timer: "Timer",
+    rules: "Rules",
+    entries: "Entries",
+    domains: "Domains",
+    dnsRoute: "DNS route",
+    forwardingRules: "Forwarding rules",
+    localIcon: "Local icon",
+    icons: "Icons",
+    lightTheme: "Light theme",
+    darkTheme: "Dark theme",
+    edit: "Edit",
+    noEntries: "No entries",
+    noDomains: "No domains",
+  },
+  ru: {
+    refresh: "Обновить",
+    autoOff: "Авто выкл.",
+    connections: "Подключения",
+    connectionsText: "Внешний IP, страна и провайдер для прямого доступа и WireGuard.",
+    start: "Старт",
+    restart: "Рестарт",
+    stop: "Стоп",
+    update: "Обновить",
+    table: "Таблица",
+    timer: "Таймер",
+    rules: "Правила",
+    entries: "Записи",
+    domains: "Домены",
+    dnsRoute: "DNS route",
+    forwardingRules: "Правила forwarding",
+    localIcon: "Локальные иконки",
+    icons: "Иконки",
+    lightTheme: "Светлая тема",
+    darkTheme: "Тёмная тема",
+    edit: "Редактировать",
+    noEntries: "Нет записей",
+    noDomains: "Нет доменов",
+  },
+};
+
+function t(key) {
+  return translations[state.lang]?.[key] || translations.en[key] || key;
+}
+
+function detectLanguage() {
+  const saved = localStorage.getItem("language");
+  if (saved === "ru" || saved === "en") return saved;
+  return navigator.language?.toLowerCase().startsWith("ru") ? "ru" : "en";
+}
+
+function applyLanguage() {
+  document.documentElement.lang = state.lang;
+  document.querySelectorAll("[data-i18n]").forEach((node) => {
+    node.textContent = t(node.dataset.i18n);
+  });
+  const languageSelect = $("#languageSelect");
+  if (languageSelect) languageSelect.value = state.lang;
+  renderThemeButton();
+  enhanceButtons(true);
+}
 
 const icons = {
   unifi: "/assets/brand/u-logo.svg",
@@ -63,7 +136,7 @@ function providerIcon(item) {
 
 function actionButton(action, label, iconName, options = {}) {
   const classes = [options.danger ? "danger" : "", options.state || ""].filter(Boolean).join(" ");
-  return `<button class="${classes}" data-action="${action}">${icon(iconName)}<span>${label}</span></button>`;
+  return `<button class="${classes}" data-action="${action}">${icon(iconName)}<span>${escapeHtml(label)}</span></button>`;
 }
 
 const editorLabels = {
@@ -200,9 +273,9 @@ function renderProject(project) {
     .map(([label, values]) => {
       const chips = values.length
         ? values.map((value) => `<code>${escapeHtml(value)}</code>`).join("")
-        : `<p>No entries</p>`;
+        : `<p>${t("noEntries")}</p>`;
       const editorKey = editorKeyFor(project.key, label);
-      const editButton = editorKey ? `<button class="icon-button edit-button" data-open-editor="${editorKey}" type="button" title="Edit" aria-label="Edit ${escapeHtml(readableFileLabel(label))}">${icon("edit")}</button>` : "";
+      const editButton = editorKey ? `<button class="icon-button edit-button" data-open-editor="${editorKey}" type="button" title="${t("edit")}" aria-label="${t("edit")} ${escapeHtml(readableFileLabel(label))}">${icon("edit")}</button>` : "";
       return `<div><div class="list-head"><h3>${escapeHtml(readableFileLabel(label))}</h3>${editButton}</div>${chips}</div>`;
     })
     .join("");
@@ -224,16 +297,16 @@ function renderProject(project) {
           </div>
         </div>
         <div class="actions">
-          ${actionButton(`${project.key}.start`, "Start", "play", { state: active ? "state-ok" : "" })}
-          ${actionButton(`${project.key}.restart`, "Restart", "refresh")}
-          ${actionButton(`${project.key}.stop`, "Stop", "stop", { danger: true, state: active ? "" : "state-bad" })}
+          ${actionButton(`${project.key}.start`, t("start"), "play", { state: active ? "state-ok" : "" })}
+          ${actionButton(`${project.key}.restart`, t("restart"), "refresh")}
+          ${actionButton(`${project.key}.stop`, t("stop"), "stop", { state: active ? "" : "state-bad" })}
         </div>
       </div>
       <div class="status-row">
-        <div class="status-cell"><span>Table</span><strong>${escapeHtml(project.activeTable)}</strong></div>
-        <div class="status-cell"><span>Timer</span><strong>${badge(project.timer)}</strong></div>
-        <div class="status-cell"><span>Rules</span><strong>${escapeHtml(project.rules)}</strong></div>
-        <div class="status-cell"><span>Entries</span><strong>${escapeHtml(Object.values(project.counts || {}).join(" / ") || "0")}</strong></div>
+        <div class="status-cell"><span>${t("timer")}</span><strong>${badge(project.timer)}</strong></div>
+        <div class="status-cell"><span>${t("table")}</span><strong>${escapeHtml(project.activeTable)}</strong></div>
+        <div class="status-cell"><span>${t("rules")}</span><strong>${escapeHtml(project.rules)}</strong></div>
+        <div class="status-cell"><span>${t("entries")}</span><strong>${escapeHtml(Object.values(project.counts || {}).join(" / ") || "0")}</strong></div>
       </div>
       <div class="list">${sampleHtml}</div>
     </section>
@@ -249,33 +322,33 @@ function renderStatus(data) {
   $("#projects").innerHTML = data.projects.map(renderProject).join("");
 
   $("#dnscryptTitle").innerHTML = `
-    ${icon("dns")}
+      ${icon("dns")}
     <div>
       <h2>${statusDot(data.dnscrypt.service)}DNSCrypt</h2>
-      <p class="event">${compactEvent("Forwarding rules", data.dnscrypt.lastEvent, data.dnscrypt.lastLog)}</p>
+      <p class="event">${compactEvent(t("forwardingRules"), data.dnscrypt.lastEvent, data.dnscrypt.lastLog)}</p>
     </div>
   `;
 
   $("#dnscryptStatus").innerHTML = `
-    <div><span>Timer</span><strong>${badge(data.dnscrypt.timer)}</strong></div>
-    <div><span>Domains</span><strong>${escapeHtml(data.dnscrypt.domains)}</strong></div>
-    <div><span>DNS route</span><strong>${escapeHtml(data.dnscrypt.route?.name || data.dnscrypt.route?.iface || "unknown")}</strong></div>
+    <div><span>${t("timer")}</span><strong>${badge(data.dnscrypt.timer)}</strong></div>
+    <div><span>${t("domains")}</span><strong>${escapeHtml(data.dnscrypt.domains)}</strong></div>
+    <div><span>${t("dnsRoute")}</span><strong>${escapeHtml(data.dnscrypt.route?.name || data.dnscrypt.route?.iface || "unknown")}</strong></div>
   `;
   $("#dnscryptDomains").innerHTML = (data.dnscrypt.samples || [])
     .map((value) => `<code>${escapeHtml(value)}</code>`)
-    .join("") || "<p>No domains</p>";
+    .join("") || `<p>${t("noDomains")}</p>`;
 
   $("#iconsTitle").innerHTML = `
       ${icon("globe")}
     <div>
       <h2>${statusDot(data.ispIcons.icons)}ISP Icons</h2>
-      <p class="event">${compactEvent("Local icon", data.ispIcons.lastEvent, data.ispIcons.lastLog)}</p>
+      <p class="event">${compactEvent(t("localIcon"), data.ispIcons.lastEvent, data.ispIcons.lastLog)}</p>
     </div>
   `;
 
   $("#iconsStatus").innerHTML = `
-    <div><span>Icons</span><strong>${escapeHtml(data.ispIcons.icons)}</strong></div>
-    <div><span>Timer</span><strong>${badge(data.ispIcons.exists ? "active" : "inactive")}</strong></div>
+    <div><span>${t("timer")}</span><strong>${badge(data.ispIcons.exists ? "active" : "inactive")}</strong></div>
+    <div><span>${t("icons")}</span><strong>${escapeHtml(data.ispIcons.icons)}</strong></div>
   `;
   $("#iconsList").innerHTML = (data.ispIcons.items || [])
     .map((item) => `<article class="isp-icon-item"><img src="${escapeHtml(item.url)}" alt=""><span>${escapeHtml(item.name)}</span></article>`)
@@ -362,7 +435,7 @@ function renderThemeButton() {
   const button = $("#themeBtn");
   const dark = document.body.classList.contains("dark");
   button.innerHTML = icon(dark ? "sun" : "moon");
-  button.title = dark ? "Light theme" : "Dark theme";
+  button.title = dark ? t("lightTheme") : t("darkTheme");
   button.setAttribute("aria-label", button.title);
 }
 
@@ -374,7 +447,7 @@ function renderLogToggle() {
   button.setAttribute("aria-label", button.title);
 }
 
-function enhanceButtons() {
+function enhanceButtons(force = false) {
   const actionIcons = {
     "dnscrypt.start": "play",
     "dnscrypt.update": "refresh",
@@ -386,10 +459,24 @@ function enhanceButtons() {
     "icons.discover": "refresh",
     "icons.uninstall": "stop",
   };
+  const actionLabels = {
+    "cloud.start": t("start"),
+    "cloud.restart": t("restart"),
+    "cloud.stop": t("stop"),
+    "updates.start": t("start"),
+    "updates.restart": t("restart"),
+    "updates.stop": t("stop"),
+    "dnscrypt.start": t("start"),
+    "dnscrypt.restart": t("restart"),
+    "dnscrypt.stop": t("stop"),
+    "icons.install": t("start"),
+    "icons.discover": t("update"),
+    "icons.uninstall": t("stop"),
+  };
 
   document.querySelectorAll("button[data-action]").forEach((button) => {
-    if (button.querySelector(".icon")) return;
-    const label = button.textContent.trim();
+    if (button.querySelector(".icon") && !force) return;
+    const label = actionLabels[button.dataset.action] || button.textContent.trim();
     const iconName = actionIcons[button.dataset.action] || "play";
     button.innerHTML = `${icon(iconName)}<span>${escapeHtml(label)}</span>`;
   });
@@ -405,8 +492,8 @@ function enhanceButtons() {
   });
 
   const refreshBtn = $("#refreshBtn");
-  if (refreshBtn && !refreshBtn.querySelector(".icon")) {
-    refreshBtn.innerHTML = `${icon("refresh")}<span>Refresh</span>`;
+  if (refreshBtn && (!refreshBtn.querySelector(".icon") || force)) {
+    refreshBtn.innerHTML = `${icon("refresh")}<span>${t("refresh")}</span>`;
   }
 }
 
@@ -528,6 +615,12 @@ $("#themeBtn").addEventListener("click", () => {
   localStorage.setItem("theme", document.body.classList.contains("dark") ? "dark" : "light");
   renderThemeButton();
 });
+$("#languageSelect").addEventListener("change", () => {
+  state.lang = $("#languageSelect").value;
+  localStorage.setItem("language", state.lang);
+  applyLanguage();
+  if (state.status) renderStatus(state.status);
+});
 $("#autoRefresh").addEventListener("change", () => {
   clearInterval(state.autoTimer);
   const seconds = Number($("#autoRefresh").value);
@@ -539,7 +632,8 @@ $("#toggleLogs").addEventListener("click", () => {
   renderLogToggle();
 });
 if (localStorage.getItem("theme") === "dark") document.body.classList.add("dark");
-renderThemeButton();
+state.lang = detectLanguage();
+applyLanguage();
 renderLogToggle();
 enhanceButtons();
 

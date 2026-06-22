@@ -127,15 +127,21 @@ install_cli_shortcuts() {
 
   cat > /usr/bin/urm <<EOF
 #!/bin/sh
-exec /bin/sh "$PROJECT_ROOT/unifi-routing-manager.sh" "\$@"
+exec /bin/bash "$PROJECT_ROOT/unifi-routing-manager.sh" "\$@"
 EOF
   chmod 755 /usr/bin/urm
 
   cat > /usr/bin/unifi-routing <<EOF
 #!/bin/sh
-exec /bin/sh "$PROJECT_ROOT/unifi-routing-manager.sh" "\$@"
+exec /bin/bash "$PROJECT_ROOT/unifi-routing-manager.sh" "\$@"
 EOF
   chmod 755 /usr/bin/unifi-routing
+
+  cat > /persistent/unifi-routing-manager.sh <<EOF
+#!/bin/sh
+exec /bin/bash "$PROJECT_ROOT/unifi-routing-manager.sh" "\$@"
+EOF
+  chmod 755 /persistent/unifi-routing-manager.sh
 }
 
 install_shared_wg_map() {

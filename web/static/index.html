@@ -29,9 +29,9 @@
     <main>
       <header class="topbar">
         <div class="toolbar">
-          <button class="primary" id="refreshBtn" type="button">Refresh</button>
+          <button class="primary" id="refreshBtn" type="button" data-i18n="refresh">Refresh</button>
           <select id="autoRefresh">
-            <option value="0">Auto off</option>
+            <option value="0" data-i18n="autoOff">Auto off</option>
             <option value="15">15 sec</option>
             <option value="30">30 sec</option>
             <option value="60">1 min</option>
@@ -40,6 +40,10 @@
         </div>
         <div class="toolbar">
           <button class="icon-button theme-toggle" id="themeBtn" type="button" title="Theme" aria-label="Theme"></button>
+          <select class="language-select" id="languageSelect" title="Language" aria-label="Language">
+            <option value="ru">RU</option>
+            <option value="en">EN</option>
+          </select>
           <button class="avatar-button" id="avatarBtn" type="button"><span id="avatarInitials">UR</span><img id="avatarImg" alt="" hidden></button>
         </div>
       </header>
@@ -47,8 +51,8 @@
       <section class="panel" id="connections">
         <div class="panel-head">
           <div>
-            <h2>Connections</h2>
-            <p>External IP, country and provider for direct access and WireGuard tunnels.</p>
+            <h2 data-i18n="connections">Connections</h2>
+            <p data-i18n="connectionsText">External IP, country and provider for direct access and WireGuard tunnels.</p>
           </div>
         </div>
         <div class="connections-list" id="connectionsList"></div>
@@ -63,7 +67,7 @@
             <div class="actions">
               <button data-action="dnscrypt.start">Start</button>
               <button data-action="dnscrypt.restart">Restart</button>
-              <button class="danger" data-action="dnscrypt.stop">Stop</button>
+              <button data-action="dnscrypt.stop">Stop</button>
             </div>
           </div>
           <div class="kv" id="dnscryptStatus"></div>
@@ -82,7 +86,7 @@
             <div class="actions">
               <button data-action="icons.install">Start</button>
               <button data-action="icons.discover">Update</button>
-              <button class="danger" data-action="icons.uninstall">Stop</button>
+              <button data-action="icons.uninstall">Stop</button>
             </div>
           </div>
           <div class="kv" id="iconsStatus"></div>
