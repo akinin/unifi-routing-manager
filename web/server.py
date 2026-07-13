@@ -203,6 +203,38 @@ def avatar_url(config=None):
     return f"/api/avatar/{Path(avatar).name}" if avatar else ""
 
 
+def brand_logo_url(config=None):
+    config = config or ensure_auth_config()
+    logo = config.get("logo") or ""
+    if not logo:
+        return ""
+    path = Path(logo)
+    if path.parent != AVATAR_DIR or path.suffix.lower() not in (".png", ".jpg", ".jpeg"):
+        return ""
+    try:
+        version = path.stat().st_mtime_ns
+    except OSError:
+        return ""
+    return f"/api/brand/{path.name}?v={version}"
+
+
+def decode_uploaded_image(payload, max_size=512 * 1024):
+    data_url = str(payload.get("data", ""))
+    if "," not in data_url:
+        return None, "", "Invalid image"
+    try:
+        raw = base64.b64decode(data_url.split(",", 1)[1], validate=True)
+    except (ValueError, TypeError):
+        return None, "", "Invalid image data"
+    if len(raw) > max_size:
+        return None, "", "Image is too large"
+    if raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        return raw, ".png", ""
+    if raw.startswith(b"\xff\xd8\xff"):
+        return raw, ".jpg", ""
+    return None, "", "Only PNG and JPEG images are supported"
+
+
 def safe_asset_name(filename, allowed=(".png", ".svg", ".ico", ".jpg", ".jpeg")):
     name = Path(filename or "").name
     suffix = Path(name).suffix.lower()
@@ -909,7 +941,24 @@ class Handler(SimpleHTTPRequestHandler):
                 "name": config.get("name", ""),
                 "username": config.get("username", ""),
                 "avatar": avatar_url(config),
+                "logo": brand_logo_url(config),
             })
+            return
+        if parsed.path.startswith("/api/brand/"):
+            config = ensure_auth_config()
+            configured = Path(config.get("logo") or "")
+            filename = safe_asset_name(Path(parsed.path).name, allowed=(".png", ".jpg", ".jpeg"))
+            path = configured if filename and configured.parent == AVATAR_DIR and configured.name == filename else None
+            if not path or not path.exists():
+                self.send_error(404)
+                return
+            body = path.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg" if path.suffix.lower() in (".jpg", ".jpeg") else "image/png")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
             return
         if parsed.path.startswith("/api/avatar/"):
             filename = safe_asset_name(Path(parsed.path).name, allowed=(".png", ".jpg", ".jpeg"))
@@ -979,7 +1028,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path not in ("/api/action", "/api/files", "/api/auth/login", "/api/auth/logout", "/api/auth/avatar", "/api/auth/profile", "/api/assets/download"):
+        if parsed.path not in ("/api/action", "/api/files", "/api/auth/login", "/api/auth/logout", "/api/auth/avatar", "/api/auth/logo", "/api/auth/profile", "/api/assets/download"):
             self.send_json({"ok": False, "output": "Not found"}, 404)
             return
         length = int(self.headers.get("Content-Length", "0"))
@@ -1035,6 +1084,23 @@ class Handler(SimpleHTTPRequestHandler):
             config["avatar"] = str(path)
             write_json(AUTH_FILE, config)
             self.send_json({"ok": True, "avatar": avatar_url(config)})
+            return
+        if parsed.path == "/api/auth/logo":
+            raw, suffix, error = decode_uploaded_image(payload)
+            if error:
+                self.send_json({"ok": False, "output": error}, 400)
+                return
+            AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+            path = AVATAR_DIR / f"brand-logo{suffix}"
+            config = ensure_auth_config()
+            previous = Path(config.get("logo") or "")
+            path.write_bytes(raw)
+            if previous != path and previous.parent == AVATAR_DIR and previous.exists():
+                previous.unlink()
+            config["logo"] = str(path)
+            write_json(AUTH_FILE, config)
+            os.chmod(AUTH_FILE, 0o600)
+            self.send_json({"ok": True, "logo": brand_logo_url(config)})
             return
         if parsed.path == "/api/auth/profile":
             ok, output, config = update_auth_credentials(payload)

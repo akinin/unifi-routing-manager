@@ -4,27 +4,24 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>UniFi Routing</title>
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link id="favicon" rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
     <span id="rootPath" hidden></span>
     <aside class="sidebar">
       <div class="brand">
-        <div class="mark"><img src="/assets/brand/u-logo.svg" alt="Ubiquiti"></div>
+        <button class="mark" id="brandLogoBtn" type="button" title="Change URM icon" aria-label="Change URM icon" data-i18n-title="changeIcon">
+          <img id="brandLogo" src="/assets/brand/u-logo.svg" alt="URM">
+        </button>
+        <input id="brandLogoFile" type="file" accept="image/png,image/jpeg" hidden>
         <div>
           <strong>URM</strong>
           <span>UniFi Routing Manager</span>
         </div>
       </div>
-      <nav>
-        <a class="active" href="#connections">Connections</a>
-        <a href="#cloud">Cloud</a>
-        <a href="#updates">Updates</a>
-        <a href="#dnscrypt">DNSCrypt</a>
-        <a href="#logs">Logs</a>
-      </nav>
       <div class="sidebar-footer">
+        <button type="button" data-action="dnscrypt.flush-cache">Clear DNS cache</button>
         <button id="projectUpdateBtn" type="button" data-action="system.update">Update URM</button>
       </div>
     </aside>
@@ -35,15 +32,15 @@
           <button class="primary" id="refreshBtn" type="button" data-i18n="refresh">Refresh</button>
           <select id="autoRefresh">
             <option value="0" data-i18n="autoOff">Auto off</option>
-            <option value="15">15 sec</option>
-            <option value="30">30 sec</option>
-            <option value="60">1 min</option>
-            <option value="300">5 min</option>
+            <option value="15" data-i18n="seconds15">15 sec</option>
+            <option value="30" data-i18n="seconds30">30 sec</option>
+            <option value="60" data-i18n="minute1">1 min</option>
+            <option value="300" data-i18n="minutes5">5 min</option>
           </select>
         </div>
         <div class="toolbar">
           <button class="icon-button theme-toggle" id="themeBtn" type="button" title="Theme" aria-label="Theme"></button>
-          <select class="language-select" id="languageSelect" title="Language" aria-label="Language">
+          <select class="language-select" id="languageSelect" title="Language" aria-label="Language" data-i18n-title="language">
             <option value="ru">RU</option>
             <option value="en">EN</option>
           </select>
@@ -70,15 +67,14 @@
             <div class="actions">
               <button data-action="dnscrypt.start">Start</button>
               <button data-action="dnscrypt.restart">Restart</button>
-              <button data-action="dnscrypt.flush-cache">Clear DNS cache</button>
               <button data-action="dnscrypt.stop">Stop</button>
             </div>
           </div>
           <div class="kv dnscrypt-kv" id="dnscryptStatus"></div>
           <div class="list-block">
             <div class="list-head">
-              <h3>Generated root domains</h3>
-              <button class="icon-button edit-button" data-open-editor="dnscrypt.domains" type="button" title="View" aria-label="View generated DNSCrypt domains"></button>
+              <h3 data-i18n="generatedDomains">Generated root domains</h3>
+              <button class="icon-button edit-button" data-open-editor="dnscrypt.domains" type="button" title="View generated DNSCrypt domains" aria-label="View generated DNSCrypt domains" data-i18n-title="viewGeneratedDomains"></button>
             </div>
             <div class="list compact-list" id="dnscryptDomains"></div>
           </div>
@@ -96,10 +92,10 @@
           <div class="kv" id="iconsStatus"></div>
           <div class="list-block icons-block">
             <div class="list-head">
-              <h3>Icons</h3>
+              <h3 data-i18n="icons">Icons</h3>
               <div class="actions compact-actions">
-                <button class="icon-button" data-open-download="provider" type="button" title="Add provider" aria-label="Add provider"></button>
-                <button class="icon-button" data-open-download="country" type="button" title="Add flag" aria-label="Add flag"></button>
+                <button class="icon-button" data-open-download="provider" type="button" title="Add provider" aria-label="Add provider" data-i18n-title="addProvider"></button>
+                <button class="icon-button" data-open-download="country" type="button" title="Add flag" aria-label="Add flag" data-i18n-title="addFlag"></button>
               </div>
             </div>
             <div class="icon-gallery" id="iconsList"></div>
@@ -110,35 +106,35 @@
       <section class="panel" id="editor" hidden>
         <div class="panel-head">
           <div>
-            <h2>Editor</h2>
-            <p>Manual routing lists and WireGuard map.</p>
+            <h2 data-i18n="editor">Editor</h2>
+            <p data-i18n="editorText">Manual routing lists and WireGuard map.</p>
           </div>
         </div>
         <div class="editor-grid">
           <article class="editor-card">
-            <div><h3>Cloud domains</h3><p data-editor-path="cloud.domains"></p></div>
+            <div><h3 data-i18n="cloudDomains">Cloud domains</h3><p data-editor-path="cloud.domains"></p></div>
             <textarea data-editor="cloud.domains" spellcheck="false"></textarea>
-            <button data-save-editor="cloud.domains">Save</button>
+            <button data-save-editor="cloud.domains" data-i18n="save">Save</button>
           </article>
           <article class="editor-card">
-            <div><h3>Cloud networks</h3><p data-editor-path="cloud.networks"></p></div>
+            <div><h3 data-i18n="cloudNetworks">Cloud networks</h3><p data-editor-path="cloud.networks"></p></div>
             <textarea data-editor="cloud.networks" spellcheck="false"></textarea>
-            <button data-save-editor="cloud.networks">Save</button>
+            <button data-save-editor="cloud.networks" data-i18n="save">Save</button>
           </article>
           <article class="editor-card">
-            <div><h3>Updates domains</h3><p data-editor-path="updates.domains"></p></div>
+            <div><h3 data-i18n="updatesDomains">Updates domains</h3><p data-editor-path="updates.domains"></p></div>
             <textarea data-editor="updates.domains" spellcheck="false"></textarea>
-            <button data-save-editor="updates.domains">Save</button>
+            <button data-save-editor="updates.domains" data-i18n="save">Save</button>
           </article>
           <article class="editor-card">
-            <div><h3>Updates networks</h3><p data-editor-path="updates.networks"></p></div>
+            <div><h3 data-i18n="updatesNetworks">Updates networks</h3><p data-editor-path="updates.networks"></p></div>
             <textarea data-editor="updates.networks" spellcheck="false"></textarea>
-            <button data-save-editor="updates.networks">Save</button>
+            <button data-save-editor="updates.networks" data-i18n="save">Save</button>
           </article>
           <article class="editor-card">
-            <div><h3>WireGuard map</h3><p data-editor-path="wg.map"></p></div>
+            <div><h3 data-i18n="wireGuardMap">WireGuard map</h3><p data-editor-path="wg.map"></p></div>
             <textarea data-editor="wg.map" spellcheck="false"></textarea>
-            <button data-save-editor="wg.map">Save</button>
+            <button data-save-editor="wg.map" data-i18n="save">Save</button>
           </article>
         </div>
       </section>
@@ -146,8 +142,8 @@
       <section class="panel" id="logs">
         <div class="panel-head">
           <div>
-            <h2>Logs</h2>
-            <p>Latest entries from local project logs.</p>
+            <h2 data-i18n="logs">Logs</h2>
+            <p data-i18n="logsText">Latest entries from local project logs.</p>
           </div>
           <div class="actions logs-actions">
             <select id="logTarget">
@@ -166,50 +162,54 @@
     <div class="toast" id="toast" hidden></div>
     <div class="modal" id="loginModal">
       <form class="modal-card" id="loginForm">
-        <h2>Sign in</h2>
-        <input id="loginUser" autocomplete="username" placeholder="Login">
-        <input id="loginPass" autocomplete="current-password" type="password" placeholder="Password">
-        <button class="primary" type="submit">Sign in</button>
+        <h2 data-i18n="signIn">Sign in</h2>
+        <input id="loginUser" autocomplete="username" placeholder="Login" data-i18n-placeholder="login">
+        <input id="loginPass" autocomplete="current-password" type="password" placeholder="Password" data-i18n-placeholder="password">
+        <button class="primary" type="submit" data-i18n="signIn">Sign in</button>
       </form>
     </div>
     <div class="modal" id="editorModal" hidden>
       <div class="modal-card wide">
-        <div class="modal-head"><h2 id="editorTitle">Editor</h2><button data-close-modal type="button">Close</button></div>
+        <div class="modal-head"><h2 id="editorTitle">Editor</h2><button data-close-modal type="button" data-i18n="close">Close</button></div>
         <p id="editorPath"></p>
         <p class="editor-description" id="editorDescription" hidden></p>
         <textarea id="modalEditor" spellcheck="false"></textarea>
-        <button class="primary" id="saveModalEditor" type="button">Save</button>
+        <button class="primary" id="saveModalEditor" type="button" data-i18n="save">Save</button>
       </div>
     </div>
     <div class="modal" id="downloadModal" hidden>
       <div class="modal-card">
-        <div class="modal-head"><h2 id="downloadTitle">Upload</h2><button data-close-modal type="button">Close</button></div>
+        <div class="modal-head"><h2 id="downloadTitle">Upload</h2><button data-close-modal type="button" data-i18n="close">Close</button></div>
         <input id="downloadUrl" placeholder="https://...">
         <input id="downloadName" placeholder="file.png / file.svg / file.ico">
-        <button class="primary" id="downloadBtn" type="button">Upload</button>
+        <button class="primary" id="downloadBtn" type="button" data-i18n="upload">Upload</button>
       </div>
     </div>
     <div class="modal" id="profileModal" hidden>
       <div class="modal-card">
-        <div class="modal-head"><h2>Profile</h2><button data-close-modal type="button">Close</button></div>
+        <div class="modal-head"><h2 data-i18n="profile">Profile</h2><button data-close-modal type="button" data-i18n="close">Close</button></div>
         <div class="profile-section">
-          <h3>Avatar</h3>
-          <input id="avatarFile" type="file" accept="image/png,image/jpeg">
-          <button id="uploadAvatar" type="button">Upload avatar</button>
+          <h3 data-i18n="avatar">Avatar</h3>
+          <input id="avatarFile" type="file" accept="image/png,image/jpeg" hidden>
+          <div class="file-picker">
+            <button id="chooseAvatar" type="button" data-i18n="chooseImage">Choose image</button>
+            <span id="avatarFileName" data-i18n="noFileSelected">No file selected</span>
+          </div>
+          <button id="uploadAvatar" type="button" data-i18n="uploadAvatar">Upload avatar</button>
         </div>
         <form class="profile-section" id="profileForm">
-          <h3>Account</h3>
-          <label for="profileLogin">Login</label>
-          <input id="profileLogin" autocomplete="username" maxlength="64" placeholder="Login" required>
-          <label for="profileCurrentPassword">Current password</label>
-          <input id="profileCurrentPassword" autocomplete="current-password" type="password" placeholder="Required to save" required>
-          <label for="profileNewPassword">New password</label>
-          <input id="profileNewPassword" autocomplete="new-password" type="password" minlength="8" placeholder="Leave empty to keep current">
-          <label for="profileConfirmPassword">Confirm new password</label>
-          <input id="profileConfirmPassword" autocomplete="new-password" type="password" minlength="8" placeholder="Repeat new password">
-          <button class="primary" type="submit">Save account</button>
+          <h3 data-i18n="account">Account</h3>
+          <label for="profileLogin" data-i18n="login">Login</label>
+          <input id="profileLogin" autocomplete="username" maxlength="64" placeholder="Login" data-i18n-placeholder="login" required>
+          <label for="profileCurrentPassword" data-i18n="currentPassword">Current password</label>
+          <input id="profileCurrentPassword" autocomplete="current-password" type="password" placeholder="Required to save" data-i18n-placeholder="requiredToSave" required>
+          <label for="profileNewPassword" data-i18n="newPassword">New password</label>
+          <input id="profileNewPassword" autocomplete="new-password" type="password" minlength="8" placeholder="Leave empty to keep current" data-i18n-placeholder="leaveEmptyPassword">
+          <label for="profileConfirmPassword" data-i18n="confirmPassword">Confirm new password</label>
+          <input id="profileConfirmPassword" autocomplete="new-password" type="password" minlength="8" placeholder="Repeat new password" data-i18n-placeholder="repeatPassword">
+          <button class="primary" type="submit" data-i18n="saveAccount">Save account</button>
         </form>
-        <button class="danger" id="logoutBtn" type="button">Logout</button>
+        <button class="danger" id="logoutBtn" type="button" data-i18n="logout">Logout</button>
       </div>
     </div>
     <script src="/app.js"></script>
