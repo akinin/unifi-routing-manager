@@ -1,8 +1,10 @@
 #!/bin/sh
 
-BASE="/persistent/ubnt-cloud"
+BASE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+PROJECT_ROOT="$(CDPATH= cd -- "$BASE/.." && pwd)"
 
-MAP="$BASE/wg-map.conf"
+COMMON_MAP="$PROJECT_ROOT/wg-map.conf"
+MAP="${UNIFI_WG_MAP:-$COMMON_MAP}"
 DOMAINS_FILE="$BASE/domains.txt"
 ADDRESSES_FILE="$BASE/addresses.txt"
 NETWORKS_FILE="$BASE/networks.txt"
@@ -16,6 +18,7 @@ LOCK="/tmp/ubnt-cloud-routes.lock"
 
 PRIO="100"
 RESOLVE_TRIES="3"
+DNS_RESOLVER="${UNIFI_CLOUD_DNS_RESOLVER:-1.1.1.1}"
 
 log() {
   echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"
@@ -36,6 +39,10 @@ ensure_files() {
   [ -f "$ADDRESSES_FILE" ] || touch "$ADDRESSES_FILE"
   [ -f "$NETWORKS_FILE" ] || touch "$NETWORKS_FILE"
   [ -f "$LOG" ] || touch "$LOG"
+}
+
+list_entries() {
+  grep -v '^[[:space:]]*#' "$1" 2>/dev/null | sed '/^[[:space:]]*$/d'
 }
 
 select_wg() {
@@ -115,9 +122,10 @@ add_rule() {
 normalize_addresses() {
   tmp="/tmp/ubnt-cloud-addresses-normalized.txt"
 
-  grep -v '^[[:space:]]*#' "$ADDRESSES_FILE" 2>/dev/null \
-    | sed '/^[[:space:]]*$/d' \
-    | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' \
+  list_entries "$ADDRESSES_FILE" \
+    | while read -r ip; do
+        is_ipv4 "$ip" && echo "$ip"
+      done \
     | sort -u > "$tmp"
 
   cat "$tmp" > "$ADDRESSES_FILE"
@@ -128,17 +136,17 @@ learn_addresses_from_domains() {
   tmp="/tmp/ubnt-cloud-learned-addresses.txt"
   : > "$tmp"
 
-  log "resolve domains from $DOMAINS_FILE, tries=$RESOLVE_TRIES"
+  log "resolve domains from $DOMAINS_FILE via $DNS_RESOLVER, tries=$RESOLVE_TRIES"
 
-  grep -v '^[[:space:]]*#' "$DOMAINS_FILE" 2>/dev/null \
-    | sed '/^[[:space:]]*$/d' \
-    | while read -r domain; do
+  list_entries "$DOMAINS_FILE" | while read -r domain; do
         log "resolve $domain"
 
         i=1
         while [ "$i" -le "$RESOLVE_TRIES" ]; do
-          dig +short A "$domain" 2>/dev/null \
-            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' >> "$tmp"
+          dig @"$DNS_RESOLVER" +short A "$domain" 2>/dev/null \
+            | while read -r ip; do
+                is_ipv4 "$ip" && echo "$ip" >> "$tmp"
+              done
           sleep 1
           i=$((i+1))
         done
@@ -155,9 +163,7 @@ apply_networks() {
 
   log "apply networks from $NETWORKS_FILE via $table"
 
-  grep -v '^[[:space:]]*#' "$NETWORKS_FILE" 2>/dev/null \
-    | sed '/^[[:space:]]*$/d' \
-    | while read -r net; do
+  list_entries "$NETWORKS_FILE" | while read -r net; do
         is_cidr4 "$net" || {
           log "skip invalid network: $net"
           continue
@@ -172,9 +178,7 @@ apply_addresses() {
 
   log "apply addresses from $ADDRESSES_FILE via $table"
 
-  grep -v '^[[:space:]]*#' "$ADDRESSES_FILE" 2>/dev/null \
-    | sed '/^[[:space:]]*$/d' \
-    | while read -r ip; do
+  list_entries "$ADDRESSES_FILE" | while read -r ip; do
         is_ipv4 "$ip" || {
           log "skip invalid IP: $ip"
           continue
@@ -187,9 +191,7 @@ apply_addresses() {
 flush_selected_conntrack() {
   log "flush conntrack for addresses from $ADDRESSES_FILE"
 
-  grep -v '^[[:space:]]*#' "$ADDRESSES_FILE" 2>/dev/null \
-    | sed '/^[[:space:]]*$/d' \
-    | while read -r ip; do
+  list_entries "$ADDRESSES_FILE" | while read -r ip; do
         is_ipv4 "$ip" || continue
         conntrack -D -d "$ip" >/dev/null 2>&1 || true
       done
@@ -200,9 +202,9 @@ summary() {
   iface="$2"
   name="$3"
 
-  domains_count="$(grep -v '^[[:space:]]*#' "$DOMAINS_FILE" 2>/dev/null | sed '/^[[:space:]]*$/d' | wc -l)"
-  networks_count="$(grep -v '^[[:space:]]*#' "$NETWORKS_FILE" 2>/dev/null | sed '/^[[:space:]]*$/d' | wc -l)"
-  addresses_count="$(grep -v '^[[:space:]]*#' "$ADDRESSES_FILE" 2>/dev/null | sed '/^[[:space:]]*$/d' | wc -l)"
+  domains_count="$(list_entries "$DOMAINS_FILE" | wc -l)"
+  networks_count="$(list_entries "$NETWORKS_FILE" | wc -l)"
+  addresses_count="$(list_entries "$ADDRESSES_FILE" | wc -l)"
   rules_count="$(ip rule show | grep "^$PRIO:" | grep -F "lookup $table" | wc -l)"
 
   log "summary: domains=$domains_count networks=$networks_count addresses=$addresses_count rules=$rules_count name=$name iface=$iface table=$table"
@@ -231,10 +233,14 @@ main() {
 
   log "active WG: name=$NAME iface=$IFACE table=$TABLE"
 
+  # Keep existing Cloud rules active while resolving, but make sure the
+  # resolver itself already exits through the newly selected tunnel.
+  add_rule "$DNS_RESOLVER/32" "$TABLE"
   learn_addresses_from_domains
 
   cleanup_rules
 
+  add_rule "$DNS_RESOLVER/32" "$TABLE"
   apply_networks "$TABLE"
   apply_addresses "$TABLE"
 

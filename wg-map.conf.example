@@ -1,0 +1,4 @@
+# table iface name
+# Replace these examples with WireGuard routing tables and interfaces from your UDM.
+180.wgclt7 wgclt7 WG-DE
+178.wgclt8 wgclt8 WG-CH

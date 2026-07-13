@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>UniFi Routing</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <span id="rootPath" hidden></span>
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="mark"><img src="/assets/brand/u-logo.svg" alt="Ubiquiti"></div>
+        <div>
+          <strong>URM</strong>
+          <span>UniFi Routing Manager</span>
+        </div>
+      </div>
+      <nav>
+        <a class="active" href="#connections">Connections</a>
+        <a href="#cloud">Cloud</a>
+        <a href="#updates">Updates</a>
+        <a href="#dnscrypt">DNSCrypt</a>
+        <a href="#logs">Logs</a>
+      </nav>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div class="toolbar">
+          <button class="primary" id="refreshBtn" type="button" data-i18n="refresh">Refresh</button>
+          <button id="projectUpdateBtn" type="button" data-action="system.update">Update URM</button>
+          <select id="autoRefresh">
+            <option value="0" data-i18n="autoOff">Auto off</option>
+            <option value="15">15 sec</option>
+            <option value="30">30 sec</option>
+            <option value="60">1 min</option>
+            <option value="300">5 min</option>
+          </select>
+        </div>
+        <div class="toolbar">
+          <button class="icon-button theme-toggle" id="themeBtn" type="button" title="Theme" aria-label="Theme"></button>
+          <select class="language-select" id="languageSelect" title="Language" aria-label="Language">
+            <option value="ru">RU</option>
+            <option value="en">EN</option>
+          </select>
+          <button class="avatar-button" id="avatarBtn" type="button"><span id="avatarInitials">UR</span><img id="avatarImg" alt="" hidden></button>
+        </div>
+      </header>
+
+      <section class="panel" id="connections">
+        <div class="panel-head">
+          <div>
+            <h2 data-i18n="connections">Connections</h2>
+            <p data-i18n="connectionsText">External IP, country and provider for direct access and WireGuard tunnels.</p>
+          </div>
+        </div>
+        <div class="connections-list" id="connectionsList"></div>
+      </section>
+
+      <section class="grid" id="projects"></section>
+
+      <section class="ops-grid">
+        <section class="panel" id="dnscrypt">
+          <div class="panel-head">
+            <div class="title-row" id="dnscryptTitle"></div>
+            <div class="actions">
+              <button data-action="dnscrypt.start">Start</button>
+              <button data-action="dnscrypt.restart">Restart</button>
+              <button data-action="dnscrypt.flush-cache">Clear DNS cache</button>
+              <button data-action="dnscrypt.stop">Stop</button>
+            </div>
+          </div>
+          <div class="kv" id="dnscryptStatus"></div>
+          <div class="list-block">
+            <div class="list-head">
+              <h3>Domains</h3>
+              <button class="icon-button edit-button" data-open-editor="updates.domains" type="button" title="Edit" aria-label="Edit DNSCrypt domains"></button>
+            </div>
+            <div class="list compact-list" id="dnscryptDomains"></div>
+          </div>
+        </section>
+
+        <section class="panel" id="isp-icons">
+          <div class="panel-head">
+            <div class="title-row" id="iconsTitle"></div>
+            <div class="actions">
+              <button data-action="icons.install">Start</button>
+              <button data-action="icons.discover">Update</button>
+              <button data-action="icons.uninstall">Stop</button>
+            </div>
+          </div>
+          <div class="kv" id="iconsStatus"></div>
+          <div class="list-block icons-block">
+            <div class="list-head">
+              <h3>Icons</h3>
+              <div class="actions compact-actions">
+                <button class="icon-button" data-open-download="provider" type="button" title="Add provider" aria-label="Add provider"></button>
+                <button class="icon-button" data-open-download="country" type="button" title="Add flag" aria-label="Add flag"></button>
+              </div>
+            </div>
+            <div class="icon-gallery" id="iconsList"></div>
+          </div>
+        </section>
+      </section>
+
+      <section class="panel" id="editor" hidden>
+        <div class="panel-head">
+          <div>
+            <h2>Editor</h2>
+            <p>Manual routing lists and WireGuard map.</p>
+          </div>
+        </div>
+        <div class="editor-grid">
+          <article class="editor-card">
+            <div><h3>Cloud domains</h3><p data-editor-path="cloud.domains"></p></div>
+            <textarea data-editor="cloud.domains" spellcheck="false"></textarea>
+            <button data-save-editor="cloud.domains">Save</button>
+          </article>
+          <article class="editor-card">
+            <div><h3>Cloud manual networks</h3><p data-editor-path="cloud.networks"></p></div>
+            <textarea data-editor="cloud.networks" spellcheck="false"></textarea>
+            <button data-save-editor="cloud.networks">Save</button>
+          </article>
+          <article class="editor-card">
+            <div><h3>Updates domains</h3><p data-editor-path="updates.domains"></p></div>
+            <textarea data-editor="updates.domains" spellcheck="false"></textarea>
+            <button data-save-editor="updates.domains">Save</button>
+          </article>
+          <article class="editor-card">
+            <div><h3>Updates manual networks</h3><p data-editor-path="updates.networks"></p></div>
+            <textarea data-editor="updates.networks" spellcheck="false"></textarea>
+            <button data-save-editor="updates.networks">Save</button>
+          </article>
+          <article class="editor-card">
+            <div><h3>WireGuard map</h3><p data-editor-path="wg.map"></p></div>
+            <textarea data-editor="wg.map" spellcheck="false"></textarea>
+            <button data-save-editor="wg.map">Save</button>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel" id="logs">
+        <div class="panel-head">
+          <div>
+            <h2>Logs</h2>
+            <p>Latest entries from local project logs.</p>
+          </div>
+          <div class="actions logs-actions">
+            <select id="logTarget">
+              <option value="cloud">Cloud</option>
+              <option value="updates">Updates</option>
+              <option value="dnscrypt">DNSCrypt</option>
+              <option value="icons">ISP Icons</option>
+            </select>
+            <button class="icon-button" id="toggleLogs" type="button" title="Expand logs" aria-label="Expand logs"></button>
+          </div>
+        </div>
+        <pre id="logBox" hidden>Loading logs...</pre>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" hidden></div>
+    <div class="modal" id="loginModal">
+      <form class="modal-card" id="loginForm">
+        <h2>Sign in</h2>
+        <input id="loginUser" autocomplete="username" placeholder="Login">
+        <input id="loginPass" autocomplete="current-password" type="password" placeholder="Password">
+        <button class="primary" type="submit">Sign in</button>
+      </form>
+    </div>
+    <div class="modal" id="editorModal" hidden>
+      <div class="modal-card wide">
+        <div class="modal-head"><h2 id="editorTitle">Editor</h2><button data-close-modal type="button">Close</button></div>
+        <p id="editorPath"></p>
+        <textarea id="modalEditor" spellcheck="false"></textarea>
+        <button class="primary" id="saveModalEditor" type="button">Save</button>
+      </div>
+    </div>
+    <div class="modal" id="downloadModal" hidden>
+      <div class="modal-card">
+        <div class="modal-head"><h2 id="downloadTitle">Upload</h2><button data-close-modal type="button">Close</button></div>
+        <input id="downloadUrl" placeholder="https://...">
+        <input id="downloadName" placeholder="file.png / file.svg / file.ico">
+        <button class="primary" id="downloadBtn" type="button">Upload</button>
+      </div>
+    </div>
+    <div class="modal" id="profileModal" hidden>
+      <div class="modal-card">
+        <div class="modal-head"><h2>Profile</h2><button data-close-modal type="button">Close</button></div>
+        <input id="avatarFile" type="file" accept="image/png,image/jpeg">
+        <button class="primary" id="uploadAvatar" type="button">Upload avatar</button>
+        <button class="danger" id="logoutBtn" type="button">Logout</button>
+      </div>
+    </div>
+    <script src="/app.js"></script>
+  </body>
+</html>

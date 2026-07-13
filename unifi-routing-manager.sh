@@ -14,9 +14,17 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 BOLD='\033[1m'
 
+clear_screen() {
+  clear 2>/dev/null || true
+}
+
 # Пути к проектам
-CLOUD_DIR="/persistent/ubnt-cloud"
-UPDATES_DIR="/persistent/ubnt-updates"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+PROJECT_ROOT="${UNIFI_ROUTING_ROOT:-$SCRIPT_DIR}"
+CLOUD_DIR="$PROJECT_ROOT/ubnt-cloud"
+UPDATES_DIR="$PROJECT_ROOT/ubnt-updates"
+DNSCRYPT_DIR="$PROJECT_ROOT/ubnt-dnscrypt"
+ISP_ICONS_DIR="$PROJECT_ROOT/ubnt-isp-icons"
 
 # Кэш для IP и геолокации
 CACHE_DIR="/tmp/unifi-routing-cache"
@@ -139,7 +147,7 @@ get_timer_interval() {
 # Функция для вывода заголовка
 print_header() {
   echo -e "${CYAN}╔═══════════════════════════════════════════════════════════╗${NC}"
-  echo -e "${CYAN}║${NC}${BOLD}             AHS UniFi Routing Manager v1.3                ${NC}${CYAN}║${NC}"
+  echo -e "${CYAN}║${NC}${BOLD}             AHS UniFi Routing Manager v1.4                ${NC}${CYAN}║${NC}"
   echo -e "${CYAN}╚═══════════════════════════════════════════════════════════╝${NC}"
   echo ""
   
@@ -222,6 +230,85 @@ show_project_status() {
   echo -e "${BOLD}└───────────────────────────────────────────────────────────┘${NC}"
 }
 
+# Функция для показа статуса DNSCrypt
+show_dnscrypt_status() {
+  local domains_count=0
+  local forwarding_count=0
+  local dnscrypt_status
+  local last_run
+
+  dnscrypt_status=$(systemctl is-active dnscrypt-proxy 2>/dev/null || true)
+  [ -z "$dnscrypt_status" ] && dnscrypt_status="inactive"
+
+  [ -f "$DNSCRYPT_DIR/domains.txt" ] && \
+    domains_count=$(grep -c '' "$DNSCRYPT_DIR/domains.txt" 2>/dev/null || echo 0)
+
+  [ -f "/run/dnscrypt-forwarding.txt" ] && \
+    forwarding_count=$(grep -c '' "/run/dnscrypt-forwarding.txt" 2>/dev/null || echo 0)
+
+  last_run=$(tail -1 "$DNSCRYPT_DIR/ubnt-dnscrypt.log" 2>/dev/null | cut -d' ' -f1-2)
+
+  echo -e "${BOLD}┌─ UBNT-DNSCRYPT ───────────────────────────────────────────┐${NC}"
+
+  if [ "$dnscrypt_status" = "active" ]; then
+    echo -e "│ ${GREEN}dnscrypt-proxy:${NC} $dnscrypt_status"
+  else
+    echo -e "│ ${RED}dnscrypt-proxy:${NC} $dnscrypt_status"
+  fi
+
+  echo -e "│ ${GREEN}Domains (persistent):${NC} $domains_count"
+  echo -e "│ ${GREEN}Forwarding rules (/run):${NC} $forwarding_count"
+
+  if [ -n "$last_run" ]; then
+    echo -e "│ ${GREEN}Last run:${NC} $last_run"
+  else
+    echo -e "│ ${YELLOW}Last run:${NC} never"
+  fi
+
+  echo -e "${BOLD}└───────────────────────────────────────────────────────────┘${NC}"
+}
+
+# Функция для показа статуса ISP icons
+show_isp_icons_status() {
+  local install_script="$ISP_ICONS_DIR/install.sh"
+  local wrapper_script="$ISP_ICONS_DIR/install-systemd-wrapper.sh"
+  local icons_count=0
+  local last_run
+
+  [ -d "$ISP_ICONS_DIR" ] && icons_count=$(find "$ISP_ICONS_DIR" -maxdepth 1 -name '*_101x101.png' 2>/dev/null | wc -l)
+  last_run=$(tail -1 "$ISP_ICONS_DIR/systemd-install.log" 2>/dev/null)
+
+  echo -e "${BOLD}┌─ UBNT-ISP-ICONS ───────────────────────────────────────────┐${NC}"
+
+  if [ -d "$ISP_ICONS_DIR" ]; then
+    echo -e "│ ${GREEN}Directory:${NC} $ISP_ICONS_DIR"
+  else
+    echo -e "│ ${RED}Directory:${NC} missing"
+  fi
+
+  if [ -x "$install_script" ]; then
+    echo -e "│ ${GREEN}Install script:${NC} executable"
+  else
+    echo -e "│ ${YELLOW}Install script:${NC} missing or not executable"
+  fi
+
+  if [ -x "$wrapper_script" ]; then
+    echo -e "│ ${GREEN}Wrapper:${NC} executable"
+  else
+    echo -e "│ ${YELLOW}Wrapper:${NC} missing or not executable"
+  fi
+
+  echo -e "│ ${GREEN}Icons:${NC} $icons_count"
+
+  if [ -n "$last_run" ]; then
+    echo -e "│ ${GREEN}Last log:${NC} $last_run"
+  else
+    echo -e "│ ${YELLOW}Last log:${NC} never"
+  fi
+
+  echo -e "${BOLD}└───────────────────────────────────────────────────────────┘${NC}"
+}
+
 # Функция для показа полного статуса
 show_status() {
   print_header
@@ -232,6 +319,16 @@ show_status() {
   
   # Updates
   show_project_status "ubnt-updates" "$UPDATES_DIR" "110"
+
+  echo ""
+
+  # DNSCrypt
+  show_dnscrypt_status
+
+  echo ""
+
+  # ISP Icons
+  show_isp_icons_status
   
   echo ""
   echo -e "${BOLD}┌─ WireGuard Tunnels ───────────────────────────────────────┐${NC}"
@@ -463,7 +560,7 @@ manage_project() {
   local priority=$3
   
   while true; do
-    clear
+    clear_screen
     print_header
     show_project_status "$project" "$dir" "$priority"
     
@@ -495,6 +592,154 @@ manage_project() {
   done
 }
 
+# Функция для управления DNSCrypt
+manage_dnscrypt() {
+  while true; do
+    clear_screen
+    print_header
+    show_dnscrypt_status
+
+    echo ""
+    echo -e "${BOLD}Actions for UBNT-DNSCRYPT:${NC}"
+    echo "  1) Update all (extract + generate + restart)"
+    echo "  2) Extract domains only"
+    echo "  3) Generate forwarding only"
+    echo "  4) Restart dnscrypt-proxy"
+    echo "  5) Show domains.txt (persistent)"
+    echo "  6) Show forwarding.txt (/run)"
+    echo "  7) Show logs (50 lines)"
+    echo "  8) Show logs (200 lines)"
+    echo "  0) Back to main menu"
+    echo ""
+
+    read -p "Select action: " action
+
+    case $action in
+      1)
+        clear_screen; print_header
+        echo -e "${BOLD}Running full update...${NC}"; echo ""
+        sh "$DNSCRYPT_DIR/ubnt-dnscrypt.sh" update
+        echo ""; echo -e "${GREEN}✓ Done${NC}"; echo ""
+        read -p "Press Enter to continue..."
+        ;;
+      2)
+        clear_screen; print_header
+        echo -e "${BOLD}Extracting domains...${NC}"; echo ""
+        sh "$DNSCRYPT_DIR/ubnt-dnscrypt.sh" extract
+        echo ""; echo -e "${GREEN}✓ Done${NC}"; echo ""
+        read -p "Press Enter to continue..."
+        ;;
+      3)
+        clear_screen; print_header
+        echo -e "${BOLD}Generating forwarding rules...${NC}"; echo ""
+        sh "$DNSCRYPT_DIR/ubnt-dnscrypt.sh" generate
+        echo ""; echo -e "${GREEN}✓ Done${NC}"; echo ""
+        read -p "Press Enter to continue..."
+        ;;
+      4)
+        clear_screen; print_header
+        echo -e "${BOLD}Restarting dnscrypt-proxy...${NC}"; echo ""
+        sh "$DNSCRYPT_DIR/ubnt-dnscrypt.sh" restart
+        echo ""; echo -e "${GREEN}✓ Done${NC}"; echo ""
+        read -p "Press Enter to continue..."
+        ;;
+      5)
+        clear_screen; print_header
+        echo -e "${BOLD}$DNSCRYPT_DIR/domains.txt:${NC}"; echo ""
+        if [ -f "$DNSCRYPT_DIR/domains.txt" ]; then
+          cat "$DNSCRYPT_DIR/domains.txt" | sed 's/^/  /'
+        else
+          echo -e "  ${YELLOW}File not found${NC}"
+        fi
+        echo ""; read -p "Press Enter to continue..."
+        ;;
+      6)
+        clear_screen; print_header
+        echo -e "${BOLD}/run/dnscrypt-forwarding.txt:${NC}"; echo ""
+        if [ -f "/run/dnscrypt-forwarding.txt" ]; then
+          cat "/run/dnscrypt-forwarding.txt" | sed 's/^/  /'
+        else
+          echo -e "  ${YELLOW}File not found${NC}"
+        fi
+        echo ""; read -p "Press Enter to continue..."
+        ;;
+      7)
+        clear_screen; print_header
+        echo -e "${BOLD}Logs for UBNT-DNSCRYPT (last 50 lines):${NC}"; echo ""
+        if [ -f "$DNSCRYPT_DIR/ubnt-dnscrypt.log" ]; then
+          tail -50 "$DNSCRYPT_DIR/ubnt-dnscrypt.log"
+        else
+          echo -e "  ${YELLOW}Log file not found${NC}"
+        fi
+        echo ""; read -p "Press Enter to continue..."
+        ;;
+      8)
+        clear_screen; print_header
+        echo -e "${BOLD}Logs for UBNT-DNSCRYPT (last 200 lines):${NC}"; echo ""
+        if [ -f "$DNSCRYPT_DIR/ubnt-dnscrypt.log" ]; then
+          tail -200 "$DNSCRYPT_DIR/ubnt-dnscrypt.log"
+        else
+          echo -e "  ${YELLOW}Log file not found${NC}"
+        fi
+        echo ""; read -p "Press Enter to continue..."
+        ;;
+      0) break ;;
+      *) echo -e "${RED}Invalid option${NC}"; sleep 1 ;;
+    esac
+  done
+}
+
+# Функция для управления ISP icons
+manage_isp_icons() {
+  while true; do
+    clear_screen
+    print_header
+    show_isp_icons_status
+
+    echo ""
+    echo -e "${BOLD}Actions for UBNT-ISP-ICONS:${NC}"
+    echo "  1) Install / patch icons"
+    echo "  2) Show logs (50 lines)"
+    echo "  3) Show logs (200 lines)"
+    echo "  0) Back to main menu"
+    echo ""
+
+    read -p "Select action: " action
+
+    case $action in
+      1)
+        clear_screen; print_header
+        echo -e "${BOLD}Installing ISP icons...${NC}"; echo ""
+        sh "$ISP_ICONS_DIR/install.sh"
+        echo ""; echo -e "${GREEN}✓ Done${NC}"; echo ""
+        read -p "Press Enter to continue..."
+        ;;
+      2)
+        clear_screen; print_header
+        echo -e "${BOLD}Logs for UBNT-ISP-ICONS (last 50 lines):${NC}"; echo ""
+        if [ -f "$ISP_ICONS_DIR/systemd-install.log" ]; then
+          tail -50 "$ISP_ICONS_DIR/systemd-install.log"
+        else
+          echo -e "  ${YELLOW}Log file not found${NC}"
+        fi
+        echo ""; read -p "Press Enter to continue..."
+        ;;
+      3)
+        clear_screen; print_header
+        echo -e "${BOLD}Logs for UBNT-ISP-ICONS (last 200 lines):${NC}"; echo ""
+        if [ -f "$ISP_ICONS_DIR/systemd-install.log" ]; then
+          tail -200 "$ISP_ICONS_DIR/systemd-install.log"
+        else
+          echo -e "  ${YELLOW}Log file not found${NC}"
+        fi
+        echo ""; read -p "Press Enter to continue..."
+        ;;
+      0) break ;;
+      *) echo -e "${RED}Invalid option${NC}"; sleep 1 ;;
+    esac
+  done
+}
+
 # Функция для создания backup
 create_backup() {
   print_header
@@ -504,11 +749,13 @@ create_backup() {
   local backup_file="/persistent/unifi-routing-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
   
   tar czf "$backup_file" \
-    /persistent/ubnt-cloud \
-    /persistent/ubnt-updates \
+    "$CLOUD_DIR" \
+    "$UPDATES_DIR" \
+    "$DNSCRYPT_DIR" \
+    "$ISP_ICONS_DIR" \
     /etc/systemd/system/ubnt-cloud-routes.* \
     /etc/systemd/system/ubnt-updates-routes.* \
-    /persistent/unifi-routing-manager.sh \
+    "$PROJECT_ROOT/unifi-routing-manager.sh" \
     2>&1 | sed 's/^/  /'
   
   echo ""
@@ -564,6 +811,14 @@ start_all() {
   systemctl enable ubnt-updates-routes.timer 2>&1 | sed 's/^/  /'
   systemctl start ubnt-updates-routes.timer 2>&1 | sed 's/^/  /'
   systemctl start ubnt-updates-routes.service 2>&1 | sed 's/^/  /'
+
+  echo ""
+  echo "Updating DNSCrypt..."
+  sh "$DNSCRYPT_DIR/ubnt-dnscrypt.sh" update 2>&1 | sed 's/^/  /'
+
+  echo ""
+  echo "Installing ISP icons..."
+  sh "$ISP_ICONS_DIR/install.sh" 2>&1 | sed 's/^/  /'
   
   echo ""
   echo -e "${GREEN}✓ All projects started${NC}"
@@ -575,33 +830,37 @@ start_all() {
 # Главное меню
 main_menu() {
   while true; do
-    clear
+    clear_screen
     show_status
-    
+
     echo ""
     echo -e "${BOLD}Main Menu:${NC}"
     echo "  1) Manage UniFi Cloud"
     echo "  2) Manage UniFi Updates"
-    echo "  3) Start all"
-    echo "  4) Stop all"
-    echo "  5) Create backup"
+    echo "  3) Manage DNSCrypt"
+    echo "  4) Manage ISP Icons"
+    echo "  5) Start all"
+    echo "  6) Stop all"
+    echo "  7) Create backup"
     echo "  0) Exit"
     echo ""
-    
+
     read -p "Select option: " option
-    
+
     case $option in
       1) manage_project "ubnt-cloud" "$CLOUD_DIR" "100" ;;
       2) manage_project "ubnt-updates" "$UPDATES_DIR" "110" ;;
-      3) start_all ;;
-      4) stop_all ;;
-      5) create_backup ;;
-      0) 
-        clear
+      3) manage_dnscrypt ;;
+      4) manage_isp_icons ;;
+      5) start_all ;;
+      6) stop_all ;;
+      7) create_backup ;;
+      0)
+        clear_screen
         echo -e "${GREEN}Goodbye!${NC}"
         exit 0
         ;;
-      *) 
+      *)
         echo -e "${RED}Invalid option${NC}"
         sleep 1
         ;;

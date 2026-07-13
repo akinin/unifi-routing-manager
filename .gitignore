@@ -1,17 +1,41 @@
-# Логи
+__pycache__/
+*.py[cod]
+.DS_Store
+.tools/
+gh_*_windows_amd64.zip
+.codex-paramiko/
+codex-paramiko-deps/
+codex-asyncssh-deps/
+ssh-runtime-deps/
+.push-worktree-*/
+.github-publish/
+.ssh-askpass.cmd
+
 *.log
-
-# Временные файлы
-*.tmp
-*.swp
-*~
+*.bak
 *.bak.*
+*.tmp
 
-# Динамически генерируемые файлы
-addresses.txt
-active-*
-networks-aws-generated.txt
+# Local credentials and operator configuration
+urm-auth.json
+wg-map.conf
+web-data/
 
-# Backup файлы
-*.tar.gz
-*.backup
+# Runtime-generated routing data
+*/addresses.txt
+*/networks.txt
+*/networks-aws-generated.txt
+*/networks-manual.txt
+ubnt-dnscrypt/domains.txt
+
+# Runtime-generated ISP assets
+ubnt-isp-icons/*_101x101.png
+ubnt-isp-icons/*.source
+ubnt-isp-icons/flags/
+
+*/active-iface
+*/active-name
+*/active-table
+
+unifi-routing-backup-*.tar.gz
+.urm-version
