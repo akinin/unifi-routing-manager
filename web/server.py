@@ -223,7 +223,8 @@ def human_event(line):
         (r"^summary: domains=(\d+) forwarding=(\d+) dnscrypt-proxy=(.+?)$", r"DNSCrypt has \2 forwarding rules; service is \3"),
         (r"^generated (\d+) rules -> .*$", r"Generated \1 forwarding rules"),
         (r"^extracted (\d+) domains -> .*$", r"Extracted \1 root domains"),
-        (r"^dnscrypt-proxy restarted OK$", "DNSCrypt service restarted"),
+        (r"^dnscrypt-proxy restarted OK(?: pid=\d+)?$", "DNSCrypt service restarted"),
+        (r"^dns cache cleared via HUP to dnsmasq pid=\d+$", "DNS cache cleared"),
         (r"^ERROR: (.*)$", r"Error: \1"),
         (r"^WARNING: (.*)$", r"Warning: \1"),
     ]
@@ -660,7 +661,7 @@ def project_status(key, config):
 def dnscrypt_status():
     base = DNSCRYPT["dir"]
     forwarding = Path("/run/dnscrypt-forwarding.txt")
-    proxy_service = systemctl_value("is-active", "dnscrypt-proxy")
+    proxy_service = "active" if run(["pgrep", "-x", "dnscrypt-proxy"], timeout=3)["ok"] else "inactive"
     domains = len(list_entries(base / "domains.txt"))
     forwarding_rules = len(list_entries(forwarding))
     service = "active" if proxy_service == "active" or forwarding_rules > 0 else proxy_service
@@ -796,6 +797,7 @@ def action_command(action):
         "dnscrypt.extract": [["sh", str(DNSCRYPT["script"]), "extract"]],
         "dnscrypt.generate": [["sh", str(DNSCRYPT["script"]), "generate"]],
         "dnscrypt.restart": [["sh", str(DNSCRYPT["script"]), "update"]],
+        "dnscrypt.flush-cache": [["sh", str(DNSCRYPT["script"]), "flush-cache"]],
         "dnscrypt.stop": [
             ["systemctl", "stop", "ubnt-dnscrypt.timer"],
             ["systemctl", "disable", "ubnt-dnscrypt.timer"],

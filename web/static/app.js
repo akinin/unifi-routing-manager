@@ -27,6 +27,8 @@ const translations = {
     domains: "Domains",
     dnsRoute: "DNS route",
     forwardingRules: "Forwarding rules",
+    clearDnsCache: "Clear DNS cache",
+    clearDnsCacheConfirm: "Clear the DNS cache on this UDM?",
     localIcon: "Local icon",
     icons: "Icons",
     lightTheme: "Light theme",
@@ -36,6 +38,8 @@ const translations = {
     noDomains: "No domains",
   },
   ru: {
+    clearDnsCache: "\u041e\u0447\u0438\u0441\u0442\u0438\u0442\u044c DNS-\u043a\u044d\u0448",
+    clearDnsCacheConfirm: "\u041e\u0447\u0438\u0441\u0442\u0438\u0442\u044c DNS-\u043a\u044d\u0448 \u043d\u0430 \u044d\u0442\u043e\u0439 UDM?",
     refresh: "Обновить",
     autoOff: "Авто выкл.",
     connections: "Подключения",
@@ -454,6 +458,7 @@ function enhanceButtons(force = false) {
     "dnscrypt.extract": "dns",
     "dnscrypt.generate": "route",
     "dnscrypt.restart": "refresh",
+    "dnscrypt.flush-cache": "refresh",
     "dnscrypt.stop": "stop",
     "icons.install": "play",
     "icons.discover": "refresh",
@@ -468,6 +473,7 @@ function enhanceButtons(force = false) {
     "updates.stop": t("stop"),
     "dnscrypt.start": t("start"),
     "dnscrypt.restart": t("restart"),
+    "dnscrypt.flush-cache": t("clearDnsCache"),
     "dnscrypt.stop": t("stop"),
     "icons.install": t("start"),
     "icons.discover": t("update"),
@@ -499,6 +505,7 @@ function enhanceButtons(force = false) {
 
 async function runAction(action) {
   if (state.busy) return;
+  if (action === "dnscrypt.flush-cache" && !window.confirm(t("clearDnsCacheConfirm"))) return;
   state.busy = true;
   showToast(`Running ${action}...`);
   try {

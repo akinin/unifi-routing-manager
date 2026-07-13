@@ -9,6 +9,9 @@ DOMAINS_FILE="$BASE/domains.txt"
 FORWARDING_FILE="/run/dnscrypt-forwarding.txt"
 RESOLVER="1.1.1.1"
 DNS_PRIO="120"
+DNSCRYPT_CONFIG="${UNIFI_DNSCRYPT_CONFIG:-/run/dnscrypt-proxy.toml}"
+DNSCRYPT_BIN="${UNIFI_DNSCRYPT_BIN:-/usr/sbin/dnscrypt-proxy}"
+DNSMASQ_PID_FILE="${UNIFI_DNSMASQ_PID_FILE:-/run/dnsmasq-main.pid}"
 
 LOG="$BASE/ubnt-dnscrypt.log"
 LOCK="/tmp/ubnt-dnscrypt.lock"
@@ -117,27 +120,102 @@ generate_forwarding() {
   log "generated $(wc -l < "$FORWARDING_FILE") rules -> $FORWARDING_FILE"
 }
 
+configure_dnscrypt() {
+  tmp="/tmp/ubnt-dnscrypt-proxy.toml"
+
+  [ -f "$DNSCRYPT_CONFIG" ] || {
+    log "ERROR: dnscrypt config not found: $DNSCRYPT_CONFIG"
+    return 1
+  }
+
+  [ -x "$DNSCRYPT_BIN" ] || {
+    log "ERROR: dnscrypt binary not found: $DNSCRYPT_BIN"
+    return 1
+  }
+
+  awk \
+    -v forwarding="forwarding_rules = '$FORWARDING_FILE'" \
+    -v hot_reload="enable_hot_reload = true" '
+      BEGIN { added = 0 }
+      /^[[:space:]]*forwarding_rules[[:space:]]*=/ { next }
+      /^[[:space:]]*enable_hot_reload[[:space:]]*=/ { next }
+      /^\[/ && !added {
+        print forwarding
+        print hot_reload
+        added = 1
+      }
+      { print }
+      END {
+        if (!added) {
+          print forwarding
+          print hot_reload
+        }
+      }
+    ' "$DNSCRYPT_CONFIG" > "$tmp" || return 1
+
+  if ! "$DNSCRYPT_BIN" -check -config "$tmp" >/dev/null 2>&1; then
+    log "ERROR: generated dnscrypt config failed validation"
+    rm -f "$tmp"
+    return 1
+  fi
+
+  cat "$tmp" > "$DNSCRYPT_CONFIG"
+  rm -f "$tmp"
+  log "configured forwarding_rules=$FORWARDING_FILE in $DNSCRYPT_CONFIG"
+}
+
+flush_dns_cache() {
+  pid="$(cat "$DNSMASQ_PID_FILE" 2>/dev/null || true)"
+
+  if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
+    log "ERROR: dnsmasq main process not found"
+    return 1
+  fi
+
+  kill -HUP "$pid" || return 1
+  log "dns cache cleared via HUP to dnsmasq pid=$pid"
+}
+
 restart_dnscrypt() {
   log "restarting dnscrypt-proxy"
 
-  if ! systemctl list-unit-files dnscrypt-proxy.service >/dev/null 2>&1; then
-    log "dnscrypt-proxy service not managed by systemd, skip restart"
+  if systemctl list-unit-files dnscrypt-proxy.service 2>/dev/null | grep -q '^dnscrypt-proxy.service'; then
+    systemctl restart dnscrypt-proxy >/dev/null 2>&1 || return 1
+    log "dnscrypt-proxy restarted OK"
     return 0
   fi
 
-  if systemctl restart dnscrypt-proxy >/dev/null 2>&1; then
-    log "dnscrypt-proxy restarted OK"
-  else
-    log "WARNING: dnscrypt-proxy restart skipped or failed"
-    return 0
-  fi
+  old_pid="$(pgrep -xo dnscrypt-proxy 2>/dev/null || true)"
+  [ -n "$old_pid" ] || {
+    log "ERROR: dnscrypt-proxy process not found"
+    return 1
+  }
+
+  kill -TERM "$old_pid" || return 1
+
+  i=1
+  while [ "$i" -le 15 ]; do
+    new_pid="$(pgrep -xo dnscrypt-proxy 2>/dev/null || true)"
+    if [ -n "$new_pid" ] && [ "$new_pid" != "$old_pid" ]; then
+      log "dnscrypt-proxy restarted OK pid=$new_pid"
+      return 0
+    fi
+    sleep 1
+    i=$((i+1))
+  done
+
+  log "ERROR: dnscrypt-proxy was not restarted by ubios"
+  return 1
 }
 
 summary() {
   domains_count="$(list_entries "$DOMAINS_FILE" | wc -l)"
   forwarding_count="$(list_entries "$FORWARDING_FILE" | wc -l)"
-  dnscrypt_status="$(systemctl is-active dnscrypt-proxy 2>/dev/null)"
-  [ -z "$dnscrypt_status" ] && dnscrypt_status="inactive"
+  if pgrep -x dnscrypt-proxy >/dev/null 2>&1; then
+    dnscrypt_status="active"
+  else
+    dnscrypt_status="inactive"
+  fi
 
   log "summary: domains=$domains_count forwarding=$forwarding_count dnscrypt-proxy=$dnscrypt_status"
 }
@@ -147,7 +225,9 @@ update_all() {
 
   extract_domains
   generate_forwarding
-  restart_dnscrypt || true
+  configure_dnscrypt || return 1
+  restart_dnscrypt || return 1
+  flush_dns_cache || true
   summary
 
   log "=== done ==="
@@ -173,8 +253,16 @@ main() {
       summary
       ;;
     restart)
-      restart_dnscrypt || true
+      rc=0
+      configure_dnscrypt && restart_dnscrypt || rc=$?
       summary
+      return "$rc"
+      ;;
+    flush-cache)
+      rc=0
+      flush_dns_cache || rc=$?
+      summary
+      return "$rc"
       ;;
     stop)
       cleanup_dns_route
@@ -184,7 +272,7 @@ main() {
       update_all
       ;;
     *)
-      echo "Usage: $0 [extract|generate|restart|stop|update]" >&2
+      echo "Usage: $0 [extract|generate|restart|flush-cache|stop|update]" >&2
       exit 2
       ;;
   esac
