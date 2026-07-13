@@ -20,25 +20,22 @@
           <span>UniFi Routing Manager</span>
         </div>
       </div>
-      <div class="sidebar-footer">
-        <button type="button" data-action="dnscrypt.flush-cache">Clear DNS cache</button>
-        <button id="projectUpdateBtn" type="button" data-action="system.update">Update URM</button>
+      <div class="sidebar-refresh">
+        <button class="primary" id="refreshBtn" type="button" data-i18n="refresh">Refresh</button>
+        <select id="autoRefresh">
+          <option value="0" data-i18n="autoOff">Auto off</option>
+          <option value="15" data-i18n="seconds15">15 sec</option>
+          <option value="30" data-i18n="seconds30">30 sec</option>
+          <option value="60" data-i18n="minute1">1 min</option>
+          <option value="300" data-i18n="minutes5">5 min</option>
+        </select>
       </div>
-    </aside>
-
-    <main>
-      <header class="topbar">
-        <div class="toolbar">
-          <button class="primary" id="refreshBtn" type="button" data-i18n="refresh">Refresh</button>
-          <select id="autoRefresh">
-            <option value="0" data-i18n="autoOff">Auto off</option>
-            <option value="15" data-i18n="seconds15">15 sec</option>
-            <option value="30" data-i18n="seconds30">30 sec</option>
-            <option value="60" data-i18n="minute1">1 min</option>
-            <option value="300" data-i18n="minutes5">5 min</option>
-          </select>
+      <div class="sidebar-footer">
+        <div class="sidebar-actions">
+          <button type="button" data-action="dnscrypt.flush-cache">Clear DNS cache</button>
+          <button id="projectUpdateBtn" type="button" data-action="system.update">Update URM</button>
         </div>
-        <div class="toolbar">
+        <div class="sidebar-account">
           <button class="icon-button theme-toggle" id="themeBtn" type="button" title="Theme" aria-label="Theme"></button>
           <select class="language-select" id="languageSelect" title="Language" aria-label="Language" data-i18n-title="language">
             <option value="ru">RU</option>
@@ -46,8 +43,10 @@
           </select>
           <button class="avatar-button" id="avatarBtn" type="button"><span id="avatarInitials">UR</span><img id="avatarImg" alt="" hidden></button>
         </div>
-      </header>
+      </div>
+    </aside>
 
+    <main>
       <section class="panel" id="connections">
         <div class="panel-head">
           <div>
@@ -186,8 +185,8 @@
       </div>
     </div>
     <div class="modal" id="profileModal" hidden>
-      <div class="modal-card">
-        <div class="modal-head"><h2 data-i18n="profile">Profile</h2><button data-close-modal type="button" data-i18n="close">Close</button></div>
+      <div class="modal-card profile-card">
+        <div class="modal-head"><h2 data-i18n="profile">Profile</h2><button class="modal-close" data-close-modal type="button" data-i18n="close">Close</button></div>
         <div class="profile-section">
           <h3 data-i18n="avatar">Avatar</h3>
           <input id="avatarFile" type="file" accept="image/png,image/jpeg" hidden>
@@ -209,7 +208,7 @@
           <input id="profileConfirmPassword" autocomplete="new-password" type="password" minlength="8" placeholder="Repeat new password" data-i18n-placeholder="repeatPassword">
           <button class="primary" type="submit" data-i18n="saveAccount">Save account</button>
         </form>
-        <button class="danger" id="logoutBtn" type="button" data-i18n="logout">Logout</button>
+        <button class="danger profile-logout" id="logoutBtn" type="button" data-i18n="logout">Logout</button>
       </div>
     </div>
     <script src="/app.js"></script>
