@@ -1,17 +1,59 @@
 #!/bin/sh
 
-BASE="/persistent/ubnt-updates"
-MAP="$BASE/wg-map.conf"
+BASE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+PROJECT_ROOT="$(CDPATH= cd -- "$BASE/.." && pwd)"
+
+COMMON_MAP="$PROJECT_ROOT/wg-map.conf"
+MAP="${UNIFI_WG_MAP:-$COMMON_MAP}"
 DOMAINS_FILE="$BASE/update-domains.txt"
+NETWORKS_FILE="$BASE/networks.txt"
+MANUAL_NETWORKS_FILE="$BASE/networks-manual.txt"
+ADDRESSES_FILE="$BASE/addresses.txt"
+
 ACTIVE_TABLE_FILE="$BASE/active-table"
 ACTIVE_IFACE_FILE="$BASE/active-iface"
 ACTIVE_NAME_FILE="$BASE/active-name"
+
 LOG="$BASE/ubnt-updates-routes.log"
+LOCK="/tmp/ubnt-updates-routes.lock"
 
 PRIO="110"
+RESOLVE_TRIES="3"
+DNS_RESOLVER="${UNIFI_UPDATES_DNS_RESOLVER:-1.1.1.1}"
+
+CDN_NETWORKS="
+${DNS_RESOLVER}/32
+13.32.0.0/15
+13.249.0.0/16
+99.84.0.0/16
+65.8.0.0/15
+108.157.0.0/16
+"
 
 log() {
   echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"
+}
+
+is_ipv4() {
+  echo "$1" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'
+}
+
+is_cidr4() {
+  echo "$1" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$'
+}
+
+ensure_files() {
+  mkdir -p "$BASE"
+  [ -f "$MAP" ] || touch "$MAP"
+  [ -f "$DOMAINS_FILE" ] || touch "$DOMAINS_FILE"
+  [ -f "$NETWORKS_FILE" ] || touch "$NETWORKS_FILE"
+  [ -f "$MANUAL_NETWORKS_FILE" ] || touch "$MANUAL_NETWORKS_FILE"
+  [ -f "$ADDRESSES_FILE" ] || touch "$ADDRESSES_FILE"
+  [ -f "$LOG" ] || touch "$LOG"
+}
+
+list_entries() {
+  grep -v '^[[:space:]]*#' "$1" 2>/dev/null | sed '/^[[:space:]]*$/d'
 }
 
 select_wg() {
@@ -24,7 +66,15 @@ select_wg() {
     [ -z "$table" ] && continue
     echo "$table" | grep -q '^#' && continue
 
+    [ -z "$iface" ] && continue
+    [ -z "$name" ] && name="$iface"
+
     log "test WG table=$table iface=$iface name=$name"
+
+    ip link show "$iface" >/dev/null 2>&1 || {
+      log "fail $name: interface $iface not found"
+      continue
+    }
 
     ip route show table "$table" 2>/dev/null | grep -q '^default ' || {
       log "fail $name: no default route in table $table"
@@ -48,106 +98,144 @@ select_wg() {
   return 1
 }
 
-cleanup_old_update_rules() {
-  log "cleanup old UniFi update wgclt rules with priority $PRIO"
+cleanup_rules() {
+  log "cleanup rules with priority $PRIO"
 
-  ip rule show \
-    | grep "^${PRIO}:" \
-    | grep 'lookup .*wgclt' \
-    | while read -r line; do
-        rule="$(echo "$line" | sed 's/^[0-9]\+:\s*//')"
-        log "delete old rule: $rule"
-        ip rule del $rule 2>/dev/null || true
-      done
+  while :; do
+    line="$(ip rule show | sed -n "/^$PRIO:/p" | sed -n '1p')"
+    [ -z "$line" ] && break
+
+    rule="$(echo "$line" | sed 's/^[0-9]\+:[[:space:]]*//')"
+    log "delete rule: $rule"
+    ip rule del $rule >/dev/null 2>&1 || break
+  done
+
+  ip route flush cache >/dev/null 2>&1 || true
 }
 
 add_rule() {
   dst="$1"
   table="$2"
 
+  [ -z "$dst" ] && return 0
+  [ -z "$table" ] && return 0
+
   ip rule show | grep -F "to $dst lookup $table" >/dev/null 2>&1
+
   if [ $? -eq 0 ]; then
     log "exists $dst via $table"
   else
     log "add $dst via $table"
-    ip rule add to "$dst" lookup "$table" priority "$PRIO" 2>/dev/null || true
+    ip rule add to "$dst" lookup "$table" priority "$PRIO" >/dev/null 2>&1 || true
   fi
 }
 
-add_update_routes() {
+apply_cdn_networks() {
   table="$1"
 
-  log "add UniFi update CDN networks via $table"
+  log "apply CDN networks via $table"
+  {
+    echo "$CDN_NETWORKS" | sed '/^[[:space:]]*$/d'
+    list_entries "$MANUAL_NETWORKS_FILE"
+  } | sort -u > "$NETWORKS_FILE"
 
-  # AWS CloudFront для firmware/updates
-  for net in \
-  13.32.0.0/15 \
-  13.249.0.0/16 \
-  99.84.0.0/16 \
-  65.8.0.0/15 \
-  108.157.0.0/16
-  do
+  list_entries "$NETWORKS_FILE" | while read -r net; do
+    is_cidr4 "$net" || {
+      log "skip invalid network: $net"
+      continue
+    }
+
     add_rule "$net" "$table"
   done
+}
 
-  if [ ! -f "$DOMAINS_FILE" ]; then
-    log "WARNING: missing $DOMAINS_FILE"
-    return
-  fi
+apply_domains() {
+  table="$1"
+  tmp="/tmp/ubnt-updates-addresses.txt"
+  : > "$tmp"
 
-  log "resolve UniFi update domains"
+  log "resolve update domains from $DOMAINS_FILE via $DNS_RESOLVER, tries=$RESOLVE_TRIES"
 
-  while read -r domain; do
-    [ -z "$domain" ] && continue
-    echo "$domain" | grep -q '^#' && continue
-
+  list_entries "$DOMAINS_FILE" | while read -r domain; do
     log "resolve $domain"
 
-    dig +short "$domain" 2>/dev/null \
-      | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' \
-      | sort -u \
-      | while read -r ip; do
-          add_rule "$ip/32" "$table"
-        done
-  done < "$DOMAINS_FILE"
-}
-
-flush_update_conntrack() {
-  log "flush UniFi update conntrack entries"
-
-  # Получить IP-адреса доменов обновлений и сбросить их conntrack
-  if [ -f "$DOMAINS_FILE" ]; then
-    while read -r domain; do
-      [ -z "$domain" ] && continue
-      echo "$domain" | grep -q '^#' && continue
-
-      dig +short "$domain" 2>/dev/null \
-        | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' \
+    i=1
+    while [ "$i" -le "$RESOLVE_TRIES" ]; do
+      dig @"$DNS_RESOLVER" +short A "$domain" 2>/dev/null \
         | sort -u \
         | while read -r ip; do
-            conntrack -D -d "$ip" 2>/dev/null || true
+            is_ipv4 "$ip" || continue
+            echo "$ip" >> "$tmp"
+            add_rule "$ip/32" "$table"
           done
-    done < "$DOMAINS_FILE"
+      sleep 1
+      i=$((i+1))
+    done
+  done
+
+  sort -u "$tmp" > "$ADDRESSES_FILE"
+  rm -f "$tmp"
+}
+
+flush_selected_conntrack() {
+  log "flush conntrack for update domains"
+
+  list_entries "$DOMAINS_FILE" | while read -r domain; do
+    dig @"$DNS_RESOLVER" +short A "$domain" 2>/dev/null \
+      | sort -u \
+      | while read -r ip; do
+          is_ipv4 "$ip" || continue
+          conntrack -D -d "$ip" >/dev/null 2>&1 || true
+        done
+  done
+}
+
+summary() {
+  table="$1"
+  iface="$2"
+  name="$3"
+
+  domains_count="$(list_entries "$DOMAINS_FILE" | wc -l)"
+  rules_count="$(ip rule show | grep "^$PRIO:" | grep -F "lookup $table" | wc -l)"
+
+  log "summary: domains=$domains_count rules=$rules_count name=$name iface=$iface table=$table"
+}
+
+main() {
+  if ! mkdir "$LOCK" 2>/dev/null; then
+    log "SKIP: another instance is running"
+    exit 0
   fi
+
+  trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT INT TERM
+
+  ensure_files
+
+  log "=== start UniFi Updates WG routing ==="
+
+  select_wg || {
+    log "ABORT: no working WG selected"
+    exit 1
+  }
+
+  TABLE="$(cat "$ACTIVE_TABLE_FILE")"
+  IFACE="$(cat "$ACTIVE_IFACE_FILE")"
+  NAME="$(cat "$ACTIVE_NAME_FILE")"
+
+  log "active WG: name=$NAME iface=$IFACE table=$TABLE"
+
+  cleanup_rules
+  apply_cdn_networks "$TABLE"
+  apply_domains "$TABLE"
+  flush_selected_conntrack
+
+  ip route flush cache >/dev/null 2>&1 || true
+
+  summary "$TABLE" "$IFACE" "$NAME"
+
+  log "=== done UniFi Updates WG routing via $NAME / $TABLE ==="
+
+  exit 0
 }
 
-log "=== start UniFi Updates WG routing ==="
-
-select_wg || {
-  log "ABORT: no working WG selected"
-  exit 1
-}
-
-TABLE="$(cat "$ACTIVE_TABLE_FILE")"
-IFACE="$(cat "$ACTIVE_IFACE_FILE")"
-NAME="$(cat "$ACTIVE_NAME_FILE")"
-
-log "active WG: name=$NAME iface=$IFACE table=$TABLE"
-
-cleanup_old_update_rules
-add_update_routes "$TABLE"
-flush_update_conntrack
-
-log "=== done UniFi Updates WG routing via $NAME / $TABLE ==="
-
-exit 0
+main "$@"

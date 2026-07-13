@@ -4,3 +4,5 @@ fw-update.ui.com
 apt.artifacts.ui.com
 apt-release-candidate.artifacts.ui.com
 apt-beta.artifacts.ui.com
+static.ubnt.com
+sentry.io

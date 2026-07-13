@@ -16,3 +16,4 @@ device.svc.ui.com
 console.ui.com
 static.ui.com
 assets.ui.com
+cdn.pkg.svc.ui.com
