@@ -6,6 +6,7 @@ const state = {
   downloadKind: "",
   autoTimer: null,
   lang: "en",
+  me: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -151,9 +152,10 @@ function actionButton(action, label, iconName, options = {}) {
 
 const editorLabels = {
   "cloud.domains": "Cloud domains",
-  "cloud.networks": "Cloud manual networks",
+  "cloud.networks": "Cloud networks",
   "updates.domains": "Updates domains",
-  "updates.networks": "Updates manual networks",
+  "updates.networks": "Updates networks",
+  "dnscrypt.domains": "DNSCrypt generated domains",
   "wg.map": "WireGuard map",
 };
 
@@ -386,6 +388,7 @@ async function loadEditors() {
 
 async function checkAuth() {
   const me = await getJson("/api/auth/me");
+  state.me = me;
   const modal = $("#loginModal");
   modal.hidden = Boolean(me.authenticated);
   if (me.authenticated) {
@@ -413,7 +416,11 @@ function openEditor(key) {
   const item = state.files?.[key];
   $("#editorTitle").textContent = editorLabels[key] || key;
   $("#editorPath").textContent = item?.path || "";
+  $("#editorDescription").textContent = item?.description || "";
+  $("#editorDescription").hidden = !item?.description;
   $("#modalEditor").value = item?.content || "";
+  $("#modalEditor").readOnly = Boolean(item?.readOnly);
+  $("#saveModalEditor").hidden = Boolean(item?.readOnly);
   $("#editorModal").hidden = false;
 }
 
@@ -615,6 +622,26 @@ async function uploadAvatar() {
   }
 }
 
+async function updateProfile() {
+  const username = $("#profileLogin").value.trim();
+  const currentPassword = $("#profileCurrentPassword").value;
+  const newPassword = $("#profileNewPassword").value;
+  const confirmPassword = $("#profileConfirmPassword").value;
+  if (newPassword !== confirmPassword) {
+    throw new Error("New passwords do not match");
+  }
+  const result = await getJson("/api/auth/profile", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, currentPassword, newPassword }),
+  });
+  showToast(result.output || "Account updated");
+  $("#profileCurrentPassword").value = "";
+  $("#profileNewPassword").value = "";
+  $("#profileConfirmPassword").value = "";
+  await checkAuth();
+}
+
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-action]");
   if (button) runAction(button.dataset.action);
@@ -636,9 +663,17 @@ $("#loginForm").addEventListener("submit", (event) => {
 $("#saveModalEditor").addEventListener("click", () => saveEditor(state.editorKey));
 $("#downloadBtn").addEventListener("click", downloadAsset);
 $("#avatarBtn").addEventListener("click", () => {
+  $("#profileLogin").value = state.me?.username || "";
+  $("#profileCurrentPassword").value = "";
+  $("#profileNewPassword").value = "";
+  $("#profileConfirmPassword").value = "";
   $("#profileModal").hidden = false;
 });
 $("#uploadAvatar").addEventListener("click", uploadAvatar);
+$("#profileForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  updateProfile().catch((error) => showToast(error.message));
+});
 $("#logoutBtn").addEventListener("click", async () => {
   await getJson("/api/auth/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
   location.reload();

@@ -34,7 +34,7 @@ PROJECTS = {
         "log": "ubnt-cloud-routes.log",
         "files": {
             "domains": "domains.txt",
-            "networks": "networks.txt",
+            "networks": "networks-manual.txt",
             "addresses": "addresses.txt",
         },
     },
@@ -80,6 +80,12 @@ EDITABLE_FILES = {
     "updates.domains": ROOT / "ubnt-updates" / "update-domains.txt",
     "updates.networks": ROOT / "ubnt-updates" / "networks-manual.txt",
     "wg.map": ROOT / "wg-map.conf",
+}
+VIEW_ONLY_FILES = {
+    "dnscrypt.domains": {
+        "path": ROOT / "ubnt-dnscrypt" / "domains.txt",
+        "description": "Generated from the Cloud and Updates domain lists. Edit those source lists to change DNSCrypt forwarding.",
+    },
 }
 
 
@@ -127,6 +133,35 @@ def verify_password(password, config):
     iterations = int(config.get("passwordIterations", 120000))
     _, digest = hash_password(password, salt, iterations)
     return hmac.compare_digest(digest, expected)
+
+
+def update_auth_credentials(payload):
+    config = ensure_auth_config()
+    current_password = str(payload.get("currentPassword", ""))
+    username = str(payload.get("username", "")).strip()
+    new_password = str(payload.get("newPassword", ""))
+
+    if not verify_password(current_password, config):
+        return False, "Current password is incorrect", None
+    if not username or len(username) > 64 or re.search(r"[\s:]", username):
+        return False, "Login must be 1-64 characters without spaces or colons", None
+    if new_password and len(new_password) < 8:
+        return False, "New password must contain at least 8 characters", None
+    if username == config.get("username") and not new_password:
+        return False, "No account changes were provided", None
+
+    updated = dict(config)
+    updated["username"] = username
+    if new_password:
+        salt, digest = hash_password(new_password)
+        updated["passwordSalt"] = salt
+        updated["passwordHash"] = digest
+        updated["passwordIterations"] = 210000
+
+    updated["sessionSecret"] = secrets.token_hex(32)
+    write_json(AUTH_FILE, updated)
+    os.chmod(AUTH_FILE, 0o600)
+    return True, "Login and password settings updated", updated
 
 
 def make_session(username):
@@ -699,6 +734,18 @@ def editable_payload():
             "path": str(path),
             "exists": path.exists(),
             "content": read_text(path, ""),
+            "readOnly": False,
+            "description": "",
+        }
+    for key, spec in VIEW_ONLY_FILES.items():
+        path = spec["path"]
+        files[key] = {
+            "key": key,
+            "path": str(path),
+            "exists": path.exists(),
+            "content": read_text(path, ""),
+            "readOnly": True,
+            "description": spec.get("description", ""),
         }
     return {"files": files}
 
@@ -932,7 +979,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path not in ("/api/action", "/api/files", "/api/auth/login", "/api/auth/logout", "/api/auth/avatar", "/api/assets/download"):
+        if parsed.path not in ("/api/action", "/api/files", "/api/auth/login", "/api/auth/logout", "/api/auth/avatar", "/api/auth/profile", "/api/assets/download"):
             self.send_json({"ok": False, "output": "Not found"}, 404)
             return
         length = int(self.headers.get("Content-Length", "0"))
@@ -988,6 +1035,27 @@ class Handler(SimpleHTTPRequestHandler):
             config["avatar"] = str(path)
             write_json(AUTH_FILE, config)
             self.send_json({"ok": True, "avatar": avatar_url(config)})
+            return
+        if parsed.path == "/api/auth/profile":
+            ok, output, config = update_auth_credentials(payload)
+            if not ok:
+                self.send_json({"ok": False, "output": output}, 400)
+                return
+            session = make_session(config["username"])
+            body = json.dumps({
+                "ok": True,
+                "output": output,
+                "name": config.get("name", ""),
+                "username": config.get("username", ""),
+                "avatar": avatar_url(config),
+            }, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Set-Cookie", f"urm_session={session}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_TTL}")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
             return
         if parsed.path == "/api/assets/download":
             self.send_json(download_asset(payload.get("kind", ""), payload.get("url", ""), payload.get("filename", "")))

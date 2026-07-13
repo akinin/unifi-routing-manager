@@ -24,13 +24,15 @@
         <a href="#dnscrypt">DNSCrypt</a>
         <a href="#logs">Logs</a>
       </nav>
+      <div class="sidebar-footer">
+        <button id="projectUpdateBtn" type="button" data-action="system.update">Update URM</button>
+      </div>
     </aside>
 
     <main>
       <header class="topbar">
         <div class="toolbar">
           <button class="primary" id="refreshBtn" type="button" data-i18n="refresh">Refresh</button>
-          <button id="projectUpdateBtn" type="button" data-action="system.update">Update URM</button>
           <select id="autoRefresh">
             <option value="0" data-i18n="autoOff">Auto off</option>
             <option value="15">15 sec</option>
@@ -72,11 +74,11 @@
               <button data-action="dnscrypt.stop">Stop</button>
             </div>
           </div>
-          <div class="kv" id="dnscryptStatus"></div>
+          <div class="kv dnscrypt-kv" id="dnscryptStatus"></div>
           <div class="list-block">
             <div class="list-head">
-              <h3>Domains</h3>
-              <button class="icon-button edit-button" data-open-editor="updates.domains" type="button" title="Edit" aria-label="Edit DNSCrypt domains"></button>
+              <h3>Generated root domains</h3>
+              <button class="icon-button edit-button" data-open-editor="dnscrypt.domains" type="button" title="View" aria-label="View generated DNSCrypt domains"></button>
             </div>
             <div class="list compact-list" id="dnscryptDomains"></div>
           </div>
@@ -119,7 +121,7 @@
             <button data-save-editor="cloud.domains">Save</button>
           </article>
           <article class="editor-card">
-            <div><h3>Cloud manual networks</h3><p data-editor-path="cloud.networks"></p></div>
+            <div><h3>Cloud networks</h3><p data-editor-path="cloud.networks"></p></div>
             <textarea data-editor="cloud.networks" spellcheck="false"></textarea>
             <button data-save-editor="cloud.networks">Save</button>
           </article>
@@ -129,7 +131,7 @@
             <button data-save-editor="updates.domains">Save</button>
           </article>
           <article class="editor-card">
-            <div><h3>Updates manual networks</h3><p data-editor-path="updates.networks"></p></div>
+            <div><h3>Updates networks</h3><p data-editor-path="updates.networks"></p></div>
             <textarea data-editor="updates.networks" spellcheck="false"></textarea>
             <button data-save-editor="updates.networks">Save</button>
           </article>
@@ -174,6 +176,7 @@
       <div class="modal-card wide">
         <div class="modal-head"><h2 id="editorTitle">Editor</h2><button data-close-modal type="button">Close</button></div>
         <p id="editorPath"></p>
+        <p class="editor-description" id="editorDescription" hidden></p>
         <textarea id="modalEditor" spellcheck="false"></textarea>
         <button class="primary" id="saveModalEditor" type="button">Save</button>
       </div>
@@ -189,8 +192,23 @@
     <div class="modal" id="profileModal" hidden>
       <div class="modal-card">
         <div class="modal-head"><h2>Profile</h2><button data-close-modal type="button">Close</button></div>
-        <input id="avatarFile" type="file" accept="image/png,image/jpeg">
-        <button class="primary" id="uploadAvatar" type="button">Upload avatar</button>
+        <div class="profile-section">
+          <h3>Avatar</h3>
+          <input id="avatarFile" type="file" accept="image/png,image/jpeg">
+          <button id="uploadAvatar" type="button">Upload avatar</button>
+        </div>
+        <form class="profile-section" id="profileForm">
+          <h3>Account</h3>
+          <label for="profileLogin">Login</label>
+          <input id="profileLogin" autocomplete="username" maxlength="64" placeholder="Login" required>
+          <label for="profileCurrentPassword">Current password</label>
+          <input id="profileCurrentPassword" autocomplete="current-password" type="password" placeholder="Required to save" required>
+          <label for="profileNewPassword">New password</label>
+          <input id="profileNewPassword" autocomplete="new-password" type="password" minlength="8" placeholder="Leave empty to keep current">
+          <label for="profileConfirmPassword">Confirm new password</label>
+          <input id="profileConfirmPassword" autocomplete="new-password" type="password" minlength="8" placeholder="Repeat new password">
+          <button class="primary" type="submit">Save account</button>
+        </form>
         <button class="danger" id="logoutBtn" type="button">Logout</button>
       </div>
     </div>
