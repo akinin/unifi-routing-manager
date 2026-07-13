@@ -19,6 +19,7 @@ LOCK="/tmp/ubnt-cloud-routes.lock"
 
 PRIO="100"
 RESOLVE_TRIES="3"
+DNS_RESOLVER="${UNIFI_CLOUD_DNS_RESOLVER:-1.1.1.1}"
 
 log() {
   echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"
@@ -136,14 +137,14 @@ learn_addresses_from_domains() {
   tmp="/tmp/ubnt-cloud-learned-addresses.txt"
   : > "$tmp"
 
-  log "resolve domains from $DOMAINS_FILE, tries=$RESOLVE_TRIES"
+  log "resolve domains from $DOMAINS_FILE via $DNS_RESOLVER, tries=$RESOLVE_TRIES"
 
   list_entries "$DOMAINS_FILE" | while read -r domain; do
         log "resolve $domain"
 
         i=1
         while [ "$i" -le "$RESOLVE_TRIES" ]; do
-          dig +short A "$domain" 2>/dev/null \
+          dig @"$DNS_RESOLVER" +short A "$domain" 2>/dev/null \
             | while read -r ip; do
                 is_ipv4 "$ip" && echo "$ip" >> "$tmp"
               done
@@ -233,10 +234,14 @@ main() {
 
   log "active WG: name=$NAME iface=$IFACE table=$TABLE"
 
+  # Keep existing Cloud rules active while resolving, but make sure the
+  # resolver itself already exits through the newly selected tunnel.
+  add_rule "$DNS_RESOLVER/32" "$TABLE"
   learn_addresses_from_domains
 
   cleanup_rules
 
+  add_rule "$DNS_RESOLVER/32" "$TABLE"
   apply_networks "$TABLE"
   apply_addresses "$TABLE"
 
