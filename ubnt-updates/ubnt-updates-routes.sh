@@ -20,8 +20,10 @@ LOCK="/tmp/ubnt-updates-routes.lock"
 
 PRIO="110"
 RESOLVE_TRIES="3"
+DNS_RESOLVER="${UNIFI_UPDATES_DNS_RESOLVER:-1.1.1.1}"
 
 CDN_NETWORKS="
+${DNS_RESOLVER}/32
 13.32.0.0/15
 13.249.0.0/16
 99.84.0.0/16
@@ -153,14 +155,14 @@ apply_domains() {
   tmp="/tmp/ubnt-updates-addresses.txt"
   : > "$tmp"
 
-  log "resolve update domains from $DOMAINS_FILE, tries=$RESOLVE_TRIES"
+  log "resolve update domains from $DOMAINS_FILE via $DNS_RESOLVER, tries=$RESOLVE_TRIES"
 
   list_entries "$DOMAINS_FILE" | while read -r domain; do
     log "resolve $domain"
 
     i=1
     while [ "$i" -le "$RESOLVE_TRIES" ]; do
-      dig +short A "$domain" 2>/dev/null \
+      dig @"$DNS_RESOLVER" +short A "$domain" 2>/dev/null \
         | sort -u \
         | while read -r ip; do
             is_ipv4 "$ip" || continue
@@ -180,7 +182,7 @@ flush_selected_conntrack() {
   log "flush conntrack for update domains"
 
   list_entries "$DOMAINS_FILE" | while read -r domain; do
-    dig +short A "$domain" 2>/dev/null \
+    dig @"$DNS_RESOLVER" +short A "$domain" 2>/dev/null \
       | sort -u \
       | while read -r ip; do
           is_ipv4 "$ip" || continue
