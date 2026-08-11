@@ -1435,7 +1435,8 @@ body.dark .title-row .icon.brand-mark {
 .page[data-page="routing"],
 .page[data-page="dns"],
 .page[data-page="providers"],
-.page[data-page="events"] {
+.page[data-page="events"],
+.page[data-page="notifications"] {
   width: min(100%, 1040px);
   margin-inline: auto;
 }
@@ -2399,6 +2400,7 @@ body.dark .title-row .icon.brand-mark {
     right: 12px;
     bottom: calc(68px + env(safe-area-inset-bottom));
     width: min(250px, calc(100vw - 24px));
+    max-height: min(70vh, 520px);
     padding: 8px;
     display: grid;
     gap: 3px;
@@ -2406,6 +2408,7 @@ body.dark .title-row .icon.brand-mark {
     border-radius: 17px;
     background: var(--panel);
     box-shadow: 0 18px 50px rgba(0, 0, 0, .36);
+    overflow-y: auto;
   }
 
   .mobile-more-menu button {

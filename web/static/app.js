@@ -467,6 +467,7 @@ const pageMeta = {
   providers: ["providers", "providersText"],
   health: ["health", "healthText"],
   events: ["events", "eventsText"],
+  notifications: ["notifications", "notificationsText"],
   logs: ["logs", "logsText"],
   settings: ["settings", "settingsText"],
 };
@@ -486,19 +487,19 @@ function showPage(page) {
     node.classList.toggle("active", active);
   });
   document.querySelectorAll("[data-nav]").forEach((button) => button.classList.toggle("active", button.dataset.nav === page));
-  $("[data-mobile-more]")?.classList.toggle("active", ["providers", "events", "logs", "settings"].includes(page));
+  $("[data-mobile-more]")?.classList.toggle("active", ["providers", "events", "notifications", "logs", "settings"].includes(page));
   updatePageHeader();
   if (page === "health" && !state.maintenanceLoaded) loadBackups().catch((error) => showToast(error.message));
   if (page === "logs" && !state.logsLoaded) loadLogs().catch((error) => showToast(error.message));
   if (page === "events") loadEvents().catch((error) => showToast(error.message));
+  if (page === "notifications" && !state.notificationsLoaded) loadNotificationSettings().catch((error) => showToast(error.message));
   if (page === "settings") {
     if (!state.filesLoaded) loadEditors().catch((error) => showToast(error.message));
-    if (!state.notificationsLoaded) loadNotificationSettings().catch((error) => showToast(error.message));
   }
 }
 
 function setupNavigationIcons() {
-  const names = { overview: "overview", routing: "route", dns: "dns", providers: "globe", health: "diagnostic", events: "bell", logs: "terminal", settings: "settings" };
+  const names = { overview: "overview", routing: "route", dns: "dns", providers: "globe", health: "diagnostic", events: "bell", notifications: "bell", logs: "terminal", settings: "settings" };
   document.querySelectorAll("[data-nav-icon]").forEach((node) => { node.innerHTML = icon(names[node.dataset.navIcon]); });
   document.querySelectorAll("[data-mobile-icon]").forEach((node) => { node.innerHTML = icon(names[node.dataset.mobileIcon]); });
   document.querySelectorAll("[data-static-icon]").forEach((node) => { node.innerHTML = icon(node.dataset.staticIcon); });
@@ -1012,7 +1013,7 @@ async function refresh() {
     optional.push(state.page === "events" ? loadEvents() : getJson("/api/events?limit=10", { cache: "no-store" }).then((events) => { updateEventCount(events.unread || 0); notifyNewEvents(events.events || []); }));
     if (state.page === "logs") optional.push(loadLogs());
     if (state.page === "settings" && !state.filesLoaded) optional.push(loadEditors());
-    if (state.page === "settings" && !state.notificationsLoaded) optional.push(loadNotificationSettings());
+    if (state.page === "notifications" && !state.notificationsLoaded) optional.push(loadNotificationSettings());
     const results = await Promise.allSettled(optional);
     const rejected = results.find((result) => result.status === "rejected");
     if (rejected) throw rejected.reason;
