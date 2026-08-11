@@ -318,6 +318,7 @@ function showPage(page) {
 function setupNavigationIcons() {
   const names = { overview: "overview", routing: "route", dns: "dns", providers: "globe", logs: "terminal", settings: "settings" };
   document.querySelectorAll("[data-nav-icon]").forEach((node) => { node.innerHTML = icon(names[node.dataset.navIcon]); });
+  document.querySelectorAll("[data-static-icon]").forEach((node) => { node.innerHTML = icon(node.dataset.staticIcon); });
 }
 
 const icons = {
@@ -349,6 +350,7 @@ const mdiPaths = {
   refresh: "M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z",
   play: "M8,5.14V19.14L19,12.14L8,5.14Z",
   stop: "M18,18H6V6H18V18Z",
+  logout: "M16,13V11H7V8L2,12L7,16V13H16M20,3H8A2,2 0 0,0 6,5V7H8V5H20V19H8V17H6V19A2,2 0 0,0 8,21H20A2,2 0 0,0 22,19V5A2,2 0 0,0 20,3Z",
   terminal: "M13,19V16H21V19H13M8.5,13L2.47,7H6.71L11.67,11.95C12.25,12.54 12.25,13.5 11.67,14.07L6.74,19H2.5L8.5,13Z",
 };
 
@@ -530,12 +532,12 @@ function setActionState(action, state) {
 function renderProject(project) {
   const sampleHtml = Object.entries(project.samples || {})
     .map(([label, values]) => {
-      const chips = values.length
-        ? values.map((value) => `<code>${escapeHtml(value)}</code>`).join("")
+      const visibleValues = values.slice(0, 3);
+      const chips = visibleValues.length
+        ? visibleValues.map((value) => `<code title="${escapeHtml(value)}">${escapeHtml(value)}</code>`).join("")
         : `<p>${t("noEntries")}</p>`;
-      const editorKey = editorKeyFor(project.key, label);
-      const editButton = editorKey ? `<button class="icon-button edit-button" data-open-editor="${editorKey}" type="button" title="${t("edit")}" aria-label="${t("edit")} ${escapeHtml(readableFileLabel(label))}">${icon("edit")}</button>` : "";
-      return `<div class="project-sample" data-sample-label="${escapeHtml(label)}"><div class="list-head"><h3>${escapeHtml(readableFileLabel(label))}</h3>${editButton}</div>${chips}</div>`;
+      const remaining = values.length - visibleValues.length;
+      return `<div class="project-sample"><div class="list-head"><h3>${escapeHtml(readableFileLabel(label))}</h3><span class="sample-count">${values.length}</span></div><div class="sample-chips">${chips}${remaining > 0 ? `<span class="more-count">+${remaining}</span>` : ""}</div></div>`;
     })
     .join("");
 
@@ -546,8 +548,7 @@ function renderProject(project) {
     .filter((value) => value && value !== "unknown")
     .join(" - ");
   const controls = active
-    ? `${actionButton(`${project.key}.restart`, t("restart"), "refresh")}
-       <details class="action-menu"><summary class="icon-button" title="${t("stop")}">${icon("more")}</summary><button class="danger" data-action="${project.key}.stop" type="button">${icon("stop")}${t("stop")}</button></details>`
+    ? `${actionButton(`${project.key}.restart`, t("restart"), "refresh")}${actionButton(`${project.key}.stop`, t("stop"), "stop", { danger: true })}`
     : actionButton(`${project.key}.start`, t("start"), "play");
   return `
     <section class="panel" id="${project.key}">
@@ -569,7 +570,7 @@ function renderProject(project) {
         <div class="status-cell"><span>${t("rules")}</span><strong>${escapeHtml(localizedStatus(project.rules))}</strong></div>
         <div class="status-cell"><span>${t("entries")}</span><strong>${escapeHtml(Object.values(project.counts || {}).join(" / ") || "0")}</strong></div>
       </div>
-      <div class="list">${sampleHtml}</div>
+      <div class="project-samples">${sampleHtml}</div>
     </section>
   `;
 }
@@ -636,7 +637,7 @@ function renderStatus(data) {
     .join("") || `<p>${t("noDomains")}</p>`;
   const dnsActive = isActiveState(data.dnscrypt.service);
   $("#dnscryptActions").innerHTML = dnsActive
-    ? `${actionButton("dnscrypt.restart", t("restart"), "refresh")}<details class="action-menu"><summary class="icon-button">${icon("more")}</summary><button class="danger" data-action="dnscrypt.stop" type="button">${icon("stop")}${t("stop")}</button></details>`
+    ? `${actionButton("dnscrypt.restart", t("restart"), "refresh")}${actionButton("dnscrypt.stop", t("stop"), "stop", { danger: true })}`
     : actionButton("dnscrypt.start", t("start"), "play");
 
   $("#iconsTitle").innerHTML = `
@@ -656,20 +657,8 @@ function renderStatus(data) {
     .join("") || `<p>${t("noIcons")}</p>`;
   const iconsActive = Boolean(data.ispIcons.exists && Number(data.ispIcons.icons) > 0);
   $("#iconsActions").innerHTML = iconsActive
-    ? `${actionButton("icons.discover", t("update"), "refresh")}<details class="action-menu"><summary class="icon-button">${icon("more")}</summary><button class="danger" data-action="icons.uninstall" type="button">${icon("stop")}${t("stop")}</button></details>`
+    ? `${actionButton("icons.discover", t("update"), "refresh")}${actionButton("icons.uninstall", t("stop"), "stop", { danger: true })}`
     : actionButton("icons.install", t("start"), "play");
-}
-
-function syncProjectSampleHeights() {
-  const samples = [...document.querySelectorAll("#projects .project-sample")];
-  samples.forEach((item) => { item.style.minHeight = ""; });
-  if (!window.matchMedia("(min-width: 681px)").matches) return;
-  const labels = [...new Set(samples.map((item) => item.dataset.sampleLabel))];
-  labels.forEach((label) => {
-    const matching = samples.filter((item) => item.dataset.sampleLabel === label);
-    const height = Math.max(...matching.map((item) => item.getBoundingClientRect().height));
-    matching.forEach((item) => { item.style.minHeight = `${Math.ceil(height)}px`; });
-  });
 }
 
 async function loadEditors() {
@@ -1099,11 +1088,6 @@ $("#toggleLogs").addEventListener("click", () => {
   const box = $("#logBox");
   box.hidden = !box.hidden;
   renderLogToggle();
-});
-let resizeTimer = null;
-window.addEventListener("resize", () => {
-  clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(syncProjectSampleHeights, 100);
 });
 document.body.classList.toggle("dark", localStorage.getItem("theme") !== "light");
 state.lang = detectLanguage();

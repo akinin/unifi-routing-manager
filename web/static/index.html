@@ -34,12 +34,8 @@
           <button id="projectUpdateBtn" type="button" data-action="system.update">Update URM</button>
         </div>
         <div class="sidebar-account">
-          <button class="icon-button theme-toggle" id="themeBtn" type="button" title="Theme" aria-label="Theme"></button>
-          <select class="language-select" id="languageSelect" title="Language" aria-label="Language" data-i18n-title="language">
-            <option value="ru">RU</option>
-            <option value="en">EN</option>
-          </select>
           <button class="avatar-button" id="avatarBtn" type="button"><span id="avatarInitials">UR</span><img id="avatarImg" alt="" hidden></button>
+          <button class="danger sidebar-logout" id="logoutBtn" type="button"><span data-static-icon="logout"></span><span data-i18n="logout">Logout</span></button>
         </div>
       </div>
     </aside>
@@ -52,6 +48,11 @@
           <p id="pageDescription" data-i18n="overviewText">WAN connections and service health.</p>
         </div>
         <div class="topbar-actions">
+          <button class="icon-button theme-toggle" id="themeBtn" type="button" title="Theme" aria-label="Theme"></button>
+          <select class="language-select" id="languageSelect" title="Language" aria-label="Language" data-i18n-title="language">
+            <option value="ru">RU</option>
+            <option value="en">EN</option>
+          </select>
           <span class="refresh-state" id="refreshState"><span class="refresh-dot"></span><span id="lastUpdated" data-i18n="notUpdated">Not updated</span></span>
           <select id="autoRefresh" aria-label="Auto refresh">
             <option value="0" data-i18n="autoOff">Auto off</option>
@@ -93,7 +94,6 @@
           <div class="list-block">
             <div class="list-head">
               <h3 data-i18n="generatedDomains">Generated root domains</h3>
-              <button class="icon-button edit-button" data-open-editor="dnscrypt.domains" type="button" title="View generated DNSCrypt domains" aria-label="View generated DNSCrypt domains" data-i18n-title="viewGeneratedDomains"></button>
             </div>
             <div class="list compact-list" id="dnscryptDomains"></div>
           </div>
@@ -228,7 +228,6 @@
           </div>
           <button class="primary" type="submit" data-i18n="saveAccount">Save account</button>
         </form>
-        <div class="profile-footer"><button class="danger profile-logout" id="logoutBtn" type="button" data-i18n="logout">Logout</button></div>
       </div>
     </div>
     <script src="/app.js"></script>
