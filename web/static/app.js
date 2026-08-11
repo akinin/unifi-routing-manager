@@ -65,6 +65,11 @@ const translations = {
     keepToken: "Leave empty to keep current token",
     testNotification: "Test notification",
     notificationSaved: "Notification settings saved",
+    telegramTransport: "Telegram transport",
+    transportAuto: "WSS with HTTPS fallback",
+    telegramWssUrl: "Telegram WSS relay",
+    telegramWssSecret: "WSS relay secret",
+    keepRelaySecret: "Leave empty to keep current secret",
     changePreview: "Change preview",
     start: "Start",
     restart: "Restart",
@@ -221,6 +226,11 @@ const translations = {
     keepToken: "Оставьте пустым, чтобы сохранить текущий токен",
     testNotification: "Проверить уведомление",
     notificationSaved: "Настройки уведомлений сохранены",
+    telegramTransport: "Транспорт Telegram",
+    transportAuto: "WSS с резервным HTTPS",
+    telegramWssUrl: "WSS relay Telegram",
+    telegramWssSecret: "Секрет WSS relay",
+    keepRelaySecret: "Оставьте пустым, чтобы сохранить текущий секрет",
     changePreview: "Предварительный просмотр изменений",
     start: "Старт",
     restart: "Рестарт",
@@ -783,6 +793,10 @@ async function loadNotificationSettings() {
   $("#telegramBotToken").value = "";
   $("#telegramBotToken").placeholder = data.telegramConfigured ? "••••••••••••" : t("keepToken");
   $("#telegramChatId").value = data.telegramChatId || "";
+  $("#telegramTransport").value = data.telegramTransport || "auto";
+  $("#telegramWssUrl").value = data.telegramWssUrl || "";
+  $("#telegramWssSecret").value = "";
+  $("#telegramWssSecret").placeholder = data.telegramWssConfigured ? "••••••••••••" : t("keepRelaySecret");
   $("#notificationWebhook").value = data.webhookUrl || "";
   state.notificationsLoaded = true;
 }
@@ -795,6 +809,9 @@ async function saveNotificationSettings() {
       enabled: $("#notificationsEnabled").checked,
       telegramBotToken: $("#telegramBotToken").value,
       telegramChatId: $("#telegramChatId").value,
+      telegramTransport: $("#telegramTransport").value,
+      telegramWssUrl: $("#telegramWssUrl").value,
+      telegramWssSecret: $("#telegramWssSecret").value,
       webhookUrl: $("#notificationWebhook").value,
     }),
   });

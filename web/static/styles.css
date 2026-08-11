@@ -1506,7 +1506,8 @@ body.dark .title-row .icon.brand-mark {
   font-weight: 700;
 }
 
-.notification-form input:not([type="checkbox"]) {
+.notification-form input:not([type="checkbox"]),
+.notification-form select {
   width: 100%;
 }
 

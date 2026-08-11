@@ -50,6 +50,7 @@ urm-update
 - проверка конфигурации перед записью и атомарное сохранение;
 - резервные копии конфигурации с восстановлением из Web UI;
 - Passkey/WebAuthn для Touch ID и Face ID при работе через доверенный HTTPS;
+- уведомления Telegram через защищённый WSS relay с резервным прямым HTTPS;
 - staging-обновление с health-check и автоматическим rollback.
 
 ## HTTPS и Passkey
@@ -61,6 +62,12 @@ UNIFI_PUBLIC_URL=https://urm.example.com
 ```
 
 Reverse proxy должен передавать исходный `Host` и `X-Forwarded-Proto: https`. После входа по паролю откройте профиль и нажмите **Добавить Face ID / Touch ID**. WebAuthn недоступен по обычному HTTP и с недоверенным сертификатом.
+
+## Telegram через WSS
+
+Каталог `relay/` содержит минимальный WebSocket relay для Telegram Bot API. Он принимает только операцию `sendMessage`, проверяет общий секрет, время и одноразовый nonce, после чего отправляет сообщение в Telegram по HTTPS. Bot token хранится на UDM и передаётся relay только внутри TLS/WSS.
+
+Relay рекомендуется запускать на локальном reverse-proxy узле, слушать только `127.0.0.1` и публиковать отдельный путь, например `wss://urm.example.com/telegram-ws`. В разделе **Настройки → Уведомления** выберите `WSS с резервным HTTPS`, укажите URL и общий секрет длиной не менее 32 символов. При недоступности relay режим `auto` автоматически использует прямой Telegram HTTPS API.
 
 ## Резервные копии и обновления
 

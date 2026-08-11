@@ -18,6 +18,8 @@ import tarfile
 import tempfile
 import difflib
 import urllib.request
+import socket
+import ssl
 from concurrent.futures import ThreadPoolExecutor
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -901,10 +903,14 @@ def notification_settings(include_secret=False):
         "enabled": bool(data.get("enabled")),
         "telegramChatId": str(data.get("telegramChatId") or ""),
         "telegramConfigured": bool(data.get("telegramBotToken") and data.get("telegramChatId")),
+        "telegramTransport": str(data.get("telegramTransport") or "auto"),
+        "telegramWssUrl": str(data.get("telegramWssUrl") or ""),
+        "telegramWssConfigured": bool(data.get("telegramWssUrl") and data.get("telegramWssSecret")),
         "webhookUrl": str(data.get("webhookUrl") or ""),
     }
     if include_secret:
         result["telegramBotToken"] = str(data.get("telegramBotToken") or "")
+        result["telegramWssSecret"] = str(data.get("telegramWssSecret") or "")
     return result
 
 
@@ -913,14 +919,97 @@ def save_notification_settings(payload):
     token = str(payload.get("telegramBotToken") or "").strip() or current.get("telegramBotToken", "")
     chat_id = str(payload.get("telegramChatId") or "").strip()
     webhook = str(payload.get("webhookUrl") or "").strip()
+    transport = str(payload.get("telegramTransport") or "auto").strip()
+    wss_url = str(payload.get("telegramWssUrl") or "").strip()
+    wss_secret = str(payload.get("telegramWssSecret") or "").strip() or current.get("telegramWssSecret", "")
     if token and not re.match(r"^\d+:[A-Za-z0-9_-]{20,}$", token):
         return {"ok": False, "output": "Invalid Telegram bot token"}
     if webhook and not webhook.startswith("https://"):
         return {"ok": False, "output": "Webhook URL must use HTTPS"}
-    data = {"enabled": bool(payload.get("enabled")), "telegramBotToken": token, "telegramChatId": chat_id, "webhookUrl": webhook}
+    if transport not in ("auto", "wss", "direct"):
+        return {"ok": False, "output": "Invalid Telegram transport"}
+    if wss_url and urlparse(wss_url).scheme != "wss":
+        return {"ok": False, "output": "Telegram relay URL must use WSS"}
+    if wss_secret and len(wss_secret) < 32:
+        return {"ok": False, "output": "Telegram relay secret must contain at least 32 characters"}
+    data = {"enabled": bool(payload.get("enabled")), "telegramBotToken": token, "telegramChatId": chat_id, "telegramTransport": transport, "telegramWssUrl": wss_url, "telegramWssSecret": wss_secret, "webhookUrl": webhook}
     write_json(NOTIFICATION_FILE, data)
     os.chmod(NOTIFICATION_FILE, 0o600)
     return {"ok": True, "settings": notification_settings(), "output": "Notification settings saved"}
+
+
+def websocket_frame(payload):
+    payload = payload.encode("utf-8")
+    mask = secrets.token_bytes(4)
+    length = len(payload)
+    header = bytearray([0x81])
+    if length < 126:
+        header.append(0x80 | length)
+    elif length <= 0xFFFF:
+        header.append(0x80 | 126)
+        header.extend(struct.pack("!H", length))
+    else:
+        header.append(0x80 | 127)
+        header.extend(struct.pack("!Q", length))
+    return bytes(header) + mask + bytes(value ^ mask[index % 4] for index, value in enumerate(payload))
+
+
+def socket_read_exact(connection, length):
+    data = bytearray()
+    while len(data) < length:
+        chunk = connection.recv(length - len(data))
+        if not chunk:
+            raise OSError("WSS relay closed the connection")
+        data.extend(chunk)
+    return bytes(data)
+
+
+def websocket_read_json(connection):
+    first, second = socket_read_exact(connection, 2)
+    opcode, length = first & 0x0F, second & 0x7F
+    if second & 0x80:
+        raise OSError("WSS server response must not be masked")
+    if length == 126:
+        length = struct.unpack("!H", socket_read_exact(connection, 2))[0]
+    elif length == 127:
+        length = struct.unpack("!Q", socket_read_exact(connection, 8))[0]
+    if opcode != 1 or length > 64 * 1024:
+        raise OSError("Invalid WSS relay response")
+    return json.loads(socket_read_exact(connection, length).decode("utf-8"))
+
+
+def telegram_send_wss(url, relay_secret, bot_token, chat_id, message):
+    parsed = urlparse(url)
+    if parsed.scheme != "wss" or not parsed.hostname:
+        raise ValueError("Invalid WSS relay URL")
+    port = parsed.port or 443
+    path = parsed.path or "/"
+    if parsed.query:
+        path += f"?{parsed.query}"
+    key = base64.b64encode(secrets.token_bytes(16)).decode("ascii")
+    expected_accept = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()).decode("ascii")
+    context = ssl.create_default_context()
+    with socket.create_connection((parsed.hostname, port), timeout=8) as tcp:
+        with context.wrap_socket(tcp, server_hostname=parsed.hostname) as connection:
+            connection.settimeout(12)
+            request = (
+                f"GET {path} HTTP/1.1\r\nHost: {parsed.hostname}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Protocol: urm-telegram-v1\r\n"
+                f"Authorization: Bearer {relay_secret}\r\nUser-Agent: URM/1\r\n\r\n"
+            )
+            connection.sendall(request.encode("ascii"))
+            response = bytearray()
+            while b"\r\n\r\n" not in response and len(response) < 16 * 1024:
+                response.extend(connection.recv(2048))
+            headers = response.decode("iso-8859-1", errors="replace")
+            if not headers.startswith("HTTP/1.1 101") or f"Sec-WebSocket-Accept: {expected_accept}".lower() not in headers.lower():
+                raise OSError(f"WSS relay upgrade failed: {headers.splitlines()[0] if headers else 'empty response'}")
+            payload = json.dumps({"botToken": bot_token, "chatId": chat_id, "text": message, "timestamp": int(time.time()), "nonce": b64url_encode(secrets.token_bytes(18))}, separators=(",", ":"))
+            connection.sendall(websocket_frame(payload))
+            result = websocket_read_json(connection)
+            if not result.get("ok"):
+                raise OSError(str(result.get("error") or "WSS relay rejected the message"))
+            return True
 
 
 def send_notification(message):
@@ -932,13 +1021,22 @@ def send_notification(message):
     token, chat_id = settings.get("telegramBotToken"), settings.get("telegramChatId")
     if token and chat_id:
         targets += 1
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        body = json.dumps({"chat_id": chat_id, "text": message}).encode("utf-8")
-        try:
-            with urllib.request.urlopen(urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}), timeout=8) as response:
-                results.append(response.status == 200)
-        except OSError:
-            results.append(False)
+        delivered = False
+        transport = settings.get("telegramTransport", "auto")
+        if transport in ("auto", "wss") and settings.get("telegramWssUrl") and settings.get("telegramWssSecret"):
+            try:
+                delivered = telegram_send_wss(settings["telegramWssUrl"], settings["telegramWssSecret"], token, chat_id, message)
+            except (OSError, ValueError, ssl.SSLError, json.JSONDecodeError):
+                delivered = False
+        if not delivered and transport in ("auto", "direct"):
+            url = f"https://api.telegram.org/bot{token}/sendMessage"
+            body = json.dumps({"chat_id": chat_id, "text": message}).encode("utf-8")
+            try:
+                with urllib.request.urlopen(urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}), timeout=8) as response:
+                    delivered = response.status == 200
+            except OSError:
+                delivered = False
+        results.append(delivered)
     webhook = settings.get("webhookUrl")
     if webhook:
         targets += 1
