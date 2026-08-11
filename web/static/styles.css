@@ -1454,6 +1454,12 @@ body.dark .title-row .icon.brand-mark {
   gap: 12px;
 }
 
+.monitoring-panel {
+  position: relative;
+  z-index: 4;
+  overflow: visible;
+}
+
 .monitoring-actions {
   position: relative;
 }
@@ -1484,10 +1490,13 @@ body.dark .title-row .icon.brand-mark {
   z-index: 12;
   top: 44px;
   right: 0;
-  width: 210px;
+  width: min(420px, calc(100vw - 32px));
+  max-height: min(60vh, 420px);
   padding: 7px;
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 3px;
+  overflow-y: auto;
   border: 1px solid var(--line-soft);
   border-radius: 11px;
   background: var(--panel);
@@ -2434,6 +2443,13 @@ body.dark .title-row .icon.brand-mark {
   #monitoringRange {
     width: 100%;
     justify-content: center;
+  }
+
+  .monitoring-picker[open] > div {
+    right: auto;
+    left: 0;
+    width: min(300px, calc(100vw - 40px));
+    grid-template-columns: 1fr;
   }
 
   .notification-form .switch-row,
