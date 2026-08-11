@@ -20,16 +20,14 @@
           <span>UniFi Routing Manager</span>
         </div>
       </div>
-      <div class="sidebar-refresh">
-        <button class="primary" id="refreshBtn" type="button" data-i18n="refresh">Refresh</button>
-        <select id="autoRefresh">
-          <option value="0" data-i18n="autoOff">Auto off</option>
-          <option value="15" data-i18n="seconds15">15 sec</option>
-          <option value="30" data-i18n="seconds30">30 sec</option>
-          <option value="60" data-i18n="minute1">1 min</option>
-          <option value="300" data-i18n="minutes5">5 min</option>
-        </select>
-      </div>
+      <nav class="sidebar-nav" aria-label="Main navigation">
+        <button class="nav-item active" type="button" data-nav="overview"><span data-nav-icon="overview"></span><span data-i18n="overview">Overview</span></button>
+        <button class="nav-item" type="button" data-nav="routing"><span data-nav-icon="routing"></span><span data-i18n="routing">Routing</span></button>
+        <button class="nav-item" type="button" data-nav="dns"><span data-nav-icon="dns"></span><span>DNS</span></button>
+        <button class="nav-item" type="button" data-nav="providers"><span data-nav-icon="providers"></span><span data-i18n="providers">Providers</span></button>
+        <button class="nav-item" type="button" data-nav="logs"><span data-nav-icon="logs"></span><span data-i18n="logs">Logs</span></button>
+        <button class="nav-item" type="button" data-nav="settings"><span data-nav-icon="settings"></span><span data-i18n="settings">Settings</span></button>
+      </nav>
       <div class="sidebar-footer">
         <div class="sidebar-actions">
           <button type="button" data-action="dnscrypt.flush-cache">Clear DNS cache</button>
@@ -47,27 +45,49 @@
     </aside>
 
     <main>
-      <section class="panel" id="connections">
-        <div class="panel-head">
-          <div>
-            <h2 data-i18n="connections">Connections</h2>
-            <p data-i18n="connectionsText">External IP, country and provider for direct access and WireGuard tunnels.</p>
-          </div>
+      <header class="topbar">
+        <div>
+          <span class="eyebrow">UniFi Routing Manager</span>
+          <h1 id="pageTitle" data-i18n="overview">Overview</h1>
+          <p id="pageDescription" data-i18n="overviewText">WAN connections and service health.</p>
         </div>
-        <div class="connections-list" id="connectionsList"></div>
-      </section>
+        <div class="topbar-actions">
+          <span class="refresh-state" id="refreshState"><span class="refresh-dot"></span><span id="lastUpdated" data-i18n="notUpdated">Not updated</span></span>
+          <select id="autoRefresh" aria-label="Auto refresh">
+            <option value="0" data-i18n="autoOff">Auto off</option>
+            <option value="15" data-i18n="seconds15">15 sec</option>
+            <option value="30" data-i18n="seconds30">30 sec</option>
+            <option value="60" data-i18n="minute1">1 min</option>
+            <option value="300" data-i18n="minutes5">5 min</option>
+          </select>
+          <button class="icon-button refresh-button" id="refreshBtn" type="button" title="Refresh" aria-label="Refresh"></button>
+        </div>
+      </header>
 
-      <section class="grid" id="projects"></section>
+      <div class="page active" data-page="overview">
+        <section class="service-overview" id="serviceOverview"></section>
+        <section class="panel" id="connections">
+          <div class="panel-head">
+            <div><h2 data-i18n="connections">Connections</h2><p data-i18n="connectionsText">External IP, country and provider for direct access and WireGuard tunnels.</p></div>
+            <span class="section-loader" id="connectionsLoader" hidden></span>
+          </div>
+          <div class="connections-list" id="connectionsList"><div class="skeleton-table"></div></div>
+        </section>
+      </div>
 
-      <section class="ops-grid">
+      <div class="page" data-page="routing" hidden>
+        <div class="segmented" id="routingTabs">
+          <button class="active" type="button" data-project-tab="cloud">UniFi Cloud</button>
+          <button type="button" data-project-tab="updates">UniFi Updates</button>
+        </div>
+        <section class="grid routing-grid" id="projects"></section>
+      </div>
+
+      <div class="page" data-page="dns" hidden>
         <section class="panel" id="dnscrypt">
           <div class="panel-head">
             <div class="title-row" id="dnscryptTitle"></div>
-            <div class="actions">
-              <button data-action="dnscrypt.start">Start</button>
-              <button data-action="dnscrypt.restart">Restart</button>
-              <button data-action="dnscrypt.stop">Stop</button>
-            </div>
+            <div class="actions" id="dnscryptActions"></div>
           </div>
           <div class="kv dnscrypt-kv" id="dnscryptStatus"></div>
           <div class="list-block">
@@ -78,15 +98,13 @@
             <div class="list compact-list" id="dnscryptDomains"></div>
           </div>
         </section>
+      </div>
 
+      <div class="page" data-page="providers" hidden>
         <section class="panel" id="isp-icons">
           <div class="panel-head">
             <div class="title-row" id="iconsTitle"></div>
-            <div class="actions">
-              <button data-action="icons.install">Start</button>
-              <button data-action="icons.discover">Update</button>
-              <button data-action="icons.uninstall">Stop</button>
-            </div>
+            <div class="actions" id="iconsActions"></div>
           </div>
           <div class="kv" id="iconsStatus"></div>
           <div class="list-block icons-block">
@@ -100,9 +118,10 @@
             <div class="icon-gallery" id="iconsList"></div>
           </div>
         </section>
-      </section>
+      </div>
 
-      <section class="panel" id="editor" hidden>
+      <div class="page" data-page="settings" hidden>
+      <section class="panel" id="editor">
         <div class="panel-head">
           <div>
             <h2 data-i18n="editor">Editor</h2>
@@ -137,7 +156,9 @@
           </article>
         </div>
       </section>
+      </div>
 
+      <div class="page" data-page="logs" hidden>
       <section class="panel" id="logs">
         <div class="panel-head">
           <div>
@@ -154,8 +175,9 @@
             <button class="icon-button" id="toggleLogs" type="button" title="Expand logs" aria-label="Expand logs"></button>
           </div>
         </div>
-        <pre id="logBox" hidden>Loading logs...</pre>
+        <pre id="logBox">Loading logs...</pre>
       </section>
+      </div>
     </main>
 
     <div class="toast" id="toast" hidden></div>

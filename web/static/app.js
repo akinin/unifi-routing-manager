@@ -7,12 +7,29 @@ const state = {
   autoTimer: null,
   lang: "en",
   me: null,
+  page: "overview",
+  projectTab: "cloud",
+  refreshing: false,
+  logsLoaded: false,
+  filesLoaded: false,
+  connections: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
 
 const translations = {
   en: {
+    overview: "Overview",
+    overviewText: "WAN connections and service health.",
+    routing: "Routing",
+    routingText: "Policy routing rules, targets and active tunnels.",
+    providers: "Providers",
+    providersText: "Local ISP icons, aliases and country flags.",
+    settings: "Settings",
+    settingsText: "Routing lists, WireGuard mapping and account settings.",
+    dnsText: "DNSCrypt status, forwarding rules and generated domains.",
+    notUpdated: "Not updated",
+    updatedNow: "Updated just now",
     refresh: "Refresh",
     autoOff: "Auto off",
     connections: "Connections",
@@ -20,6 +37,7 @@ const translations = {
     start: "Start",
     restart: "Restart",
     stop: "Stop",
+    stopConfirm: "Stop this service?",
     update: "Update",
     table: "Table",
     timer: "Timer",
@@ -119,6 +137,17 @@ const translations = {
     error: "Error",
   },
   ru: {
+    overview: "Обзор",
+    overviewText: "WAN-подключения и состояние сервисов.",
+    routing: "Маршрутизация",
+    routingText: "Правила, направления и активные туннели.",
+    providers: "Провайдеры",
+    providersText: "Локальные ISP-иконки, алиасы и флаги стран.",
+    settings: "Настройки",
+    settingsText: "Списки маршрутизации, карта WireGuard и учётная запись.",
+    dnsText: "Состояние DNSCrypt, перенаправление и сгенерированные домены.",
+    notUpdated: "Ещё не обновлялось",
+    updatedNow: "Обновлено только что",
     clearDnsCache: "\u041e\u0447\u0438\u0441\u0442\u0438\u0442\u044c DNS-\u043a\u044d\u0448",
     clearDnsCacheConfirm: "\u041e\u0447\u0438\u0441\u0442\u0438\u0442\u044c DNS-\u043a\u044d\u0448 \u043d\u0430 \u044d\u0442\u043e\u0439 UDM?",
     updateProject: "\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u044c URM",
@@ -132,6 +161,7 @@ const translations = {
     start: "Старт",
     restart: "Рестарт",
     stop: "Стоп",
+    stopConfirm: "Остановить этот сервис?",
     update: "Обновить",
     table: "Таблица",
     timer: "Таймер",
@@ -253,6 +283,41 @@ function applyLanguage() {
   if (languageSelect) languageSelect.value = state.lang;
   renderThemeButton();
   enhanceButtons(true);
+  updatePageHeader();
+}
+
+const pageMeta = {
+  overview: ["overview", "overviewText"],
+  routing: ["routing", "routingText"],
+  dns: ["DNS", "dnsText"],
+  providers: ["providers", "providersText"],
+  logs: ["logs", "logsText"],
+  settings: ["settings", "settingsText"],
+};
+
+function updatePageHeader() {
+  const [titleKey, descriptionKey] = pageMeta[state.page] || pageMeta.overview;
+  $("#pageTitle").textContent = titleKey === "DNS" ? "DNS" : t(titleKey);
+  $("#pageDescription").textContent = t(descriptionKey);
+}
+
+function showPage(page) {
+  if (!pageMeta[page]) return;
+  state.page = page;
+  document.querySelectorAll("[data-page]").forEach((node) => {
+    const active = node.dataset.page === page;
+    node.hidden = !active;
+    node.classList.toggle("active", active);
+  });
+  document.querySelectorAll("[data-nav]").forEach((button) => button.classList.toggle("active", button.dataset.nav === page));
+  updatePageHeader();
+  if (page === "logs" && !state.logsLoaded) loadLogs().catch((error) => showToast(error.message));
+  if (page === "settings" && !state.filesLoaded) loadEditors().catch((error) => showToast(error.message));
+}
+
+function setupNavigationIcons() {
+  const names = { overview: "overview", routing: "route", dns: "dns", providers: "globe", logs: "terminal", settings: "settings" };
+  document.querySelectorAll("[data-nav-icon]").forEach((node) => { node.innerHTML = icon(names[node.dataset.navIcon]); });
 }
 
 const icons = {
@@ -265,6 +330,9 @@ const icons = {
 };
 
 const mdiPaths = {
+  overview: "M3,3H11V11H3V3M5,5V9H9V5H5M13,3H21V11H13V3M15,5V9H19V5H15M3,13H11V21H3V13M5,15V19H9V15H5M13,13H21V21H13V13M15,15V19H19V15H15Z",
+  settings: "M12,15.5A3.5,3.5 0 1,1 12,8.5A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.42,11L21.54,9.37L19.54,5.9L17.05,6.9C16.54,6.5 16,6.18 15.37,5.94L15,3.29H11L10.62,5.94C10,6.18 9.45,6.5 8.95,6.9L6.46,5.9L4.46,9.37L6.57,11C6.53,11.34 6.5,11.67 6.5,12C6.5,12.33 6.53,12.65 6.58,12.97L4.46,14.63L6.46,18.1L8.95,17.09C9.46,17.5 10,17.82 10.63,18.06L11,20.71H15L15.38,18.06C16,17.81 16.55,17.5 17.05,17.09L19.54,18.1L21.54,14.63L19.43,12.97Z",
+  more: "M12,8A2,2 0 1,0 12,4A2,2 0 0,0 12,8M12,10A2,2 0 1,0 12,14A2,2 0 0,0 12,10M12,16A2,2 0 1,0 12,20A2,2 0 0,0 12,16Z",
   cloud: "M6.5 20Q4.22 20 2.61 18.43 1 16.85 1 14.58 1 12.63 2.17 11.1 3.35 9.57 5.25 9.15 5.88 6.85 7.75 5.43 9.63 4 12 4 14.93 4 16.96 6.04 19 8.07 19 11 20.73 11.2 21.86 12.5 23 13.78 23 15.5 23 17.38 21.69 18.69 20.38 20 18.5 20M6.5 18H18.5Q19.55 18 20.27 17.27 21 16.55 21 15.5 21 14.45 20.27 13.73 19.55 13 18.5 13H17V11Q17 8.93 15.54 7.46 14.08 6 12 6 9.93 6 8.46 7.46 7 8.93 7 11H6.5Q5.05 11 4.03 12.03 3 13.05 3 14.5 3 15.95 4.03 17 5.05 18 6.5 18M12 12Z",
   update: "M21,10.12H14.22L16.96,7.3C14.23,4.6 9.81,4.5 7.08,7.2C4.35,9.91 4.35,14.28 7.08,17C9.81,19.7 14.23,19.7 16.96,17C18.32,15.65 19,14.08 19,12.1H21C21,14.08 20.12,16.65 18.36,18.39C14.85,21.87 9.15,21.87 5.64,18.39C2.14,14.92 2.11,9.28 5.62,5.81C9.13,2.34 14.76,2.34 18.27,5.81L21,3V10.12M12.5,8V12.25L16,14.33L15.28,15.54L11,13V8H12.5Z",
   download: "M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z",
@@ -375,16 +443,12 @@ async function getJson(url, options) {
 }
 
 function renderConnections(data) {
+  state.connections = data;
   const connections = (data.connections || []).filter((item) => item.ip && item.ip !== "N/A");
   $("#connectionsList").innerHTML = connections.length
-    ? `
-      <div class="connection header">
-        <div>${t("connection")}</div>
-        <div>IP</div>
-        <div>${t("country")}</div>
-        <div>${t("provider")}</div>
-      </div>
-      ${connections
+    ? `<div class="table-scroll"><table class="data-table">
+        <thead><tr><th>${t("connection")}</th><th>IP</th><th>${t("country")}</th><th>${t("provider")}</th></tr></thead>
+        <tbody>${connections
         .map((item) => {
           const active = item.active ? item.activeFor.map((tag) => `<span class="active-pill">${escapeHtml(tag)}</span>`).join("") : "";
           const title = item.iface
@@ -395,18 +459,18 @@ function renderConnections(data) {
             : escapeHtml(item.country || "Unknown");
           const provider = `${item.icon ? `<img class="provider-inline" src="${escapeHtml(item.icon)}" alt="">` : ""}${escapeHtml(item.isp)}`;
           return `
-            <article class="connection ${item.active ? "active" : ""}">
-              <div class="connection-title">
+            <tr class="${item.active ? "active" : ""}">
+              <td><div class="connection-title">
                 ${icon(item.type === "wireguard" ? "wireguard" : "globe")}
                 <div><strong>${title}</strong>${active}</div>
-              </div>
-              <div><strong>${escapeHtml(item.ip)}</strong></div>
-              <div><strong class="inline-media">${country}</strong></div>
-              <div><strong class="inline-media">${provider}</strong></div>
-            </article>
+              </div></td>
+              <td data-label="IP"><strong>${escapeHtml(item.ip)}</strong></td>
+              <td data-label="${t("country")}"><strong class="inline-media">${country}</strong></td>
+              <td data-label="${t("provider")}"><strong class="inline-media">${provider}</strong></td>
+            </tr>
           `;
         })
-        .join("")}`
+        .join("")}</tbody></table></div>`
     : `<p class="empty">${t("noConnectionData")}</p>`;
 }
 
@@ -481,6 +545,10 @@ function renderProject(project) {
   const projectSubtitle = [localizedStatus(project.activeName || "not configured"), projectEvent]
     .filter((value) => value && value !== "unknown")
     .join(" - ");
+  const controls = active
+    ? `${actionButton(`${project.key}.restart`, t("restart"), "refresh")}
+       <details class="action-menu"><summary class="icon-button" title="${t("stop")}">${icon("more")}</summary><button class="danger" data-action="${project.key}.stop" type="button">${icon("stop")}${t("stop")}</button></details>`
+    : actionButton(`${project.key}.start`, t("start"), "play");
   return `
     <section class="panel" id="${project.key}">
       <div class="panel-head">
@@ -492,9 +560,7 @@ function renderProject(project) {
           </div>
         </div>
         <div class="actions">
-          ${actionButton(`${project.key}.start`, t("start"), "play", { state: active ? "state-ok" : "" })}
-          ${actionButton(`${project.key}.restart`, t("restart"), "refresh")}
-          ${actionButton(`${project.key}.stop`, t("stop"), "stop", { state: active ? "" : "state-bad" })}
+          ${controls}
         </div>
       </div>
       <div class="status-row">
@@ -508,14 +574,49 @@ function renderProject(project) {
   `;
 }
 
+function renderProjects() {
+  const projects = state.status?.projects || [];
+  const selected = projects.filter((project) => project.key === state.projectTab);
+  $("#projects").innerHTML = selected.map(renderProject).join("");
+  document.querySelectorAll("[data-project-tab]").forEach((button) => button.classList.toggle("active", button.dataset.projectTab === state.projectTab));
+}
+
+function renderServiceOverview(data) {
+  const cards = [
+    ...(data.projects || []).map((project) => ({
+      title: project.title,
+      subtitle: project.activeName || t("notConfigured"),
+      value: `${project.rules || 0} ${t("rules").toLowerCase()}`,
+      state: project.timer,
+      icon: project.key === "cloud" ? "cloud" : "update",
+      page: "routing",
+      project: project.key,
+    })),
+    {
+      title: "DNSCrypt",
+      subtitle: `${data.dnscrypt.domains || 0} ${t("domains").toLowerCase()}`,
+      value: data.dnscrypt.route?.name || data.dnscrypt.route?.iface || t("unknown"),
+      state: data.dnscrypt.service,
+      icon: "dns",
+      page: "dns",
+    },
+  ];
+  $("#serviceOverview").innerHTML = cards.map((item) => `
+    <button class="service-card" type="button" data-go-page="${item.page}" ${item.project ? `data-go-project="${item.project}"` : ""}>
+      <span class="service-icon">${icon(item.icon)}</span>
+      <span class="service-copy"><span>${item.title}</span><small>${escapeHtml(localizedStatus(item.subtitle))}</small></span>
+      <span class="service-meta">${badge(item.state)}<small>${escapeHtml(item.value)}</small></span>
+    </button>
+  `).join("");
+}
+
 function renderStatus(data) {
   state.status = data;
   const address = data.host === "0.0.0.0" ? `LAN access on port ${data.port}` : `${data.host}:${data.port}`;
   const rootPath = $("#rootPath");
   if (rootPath) rootPath.textContent = `${address} - root ${data.root}`;
-  renderConnections(data);
-  $("#projects").innerHTML = data.projects.map(renderProject).join("");
-  requestAnimationFrame(syncProjectSampleHeights);
+  renderServiceOverview(data);
+  renderProjects();
 
   $("#dnscryptTitle").innerHTML = `
       ${icon("dns")}
@@ -533,6 +634,10 @@ function renderStatus(data) {
   $("#dnscryptDomains").innerHTML = (data.dnscrypt.samples || [])
     .map((value) => `<code>${escapeHtml(value)}</code>`)
     .join("") || `<p>${t("noDomains")}</p>`;
+  const dnsActive = isActiveState(data.dnscrypt.service);
+  $("#dnscryptActions").innerHTML = dnsActive
+    ? `${actionButton("dnscrypt.restart", t("restart"), "refresh")}<details class="action-menu"><summary class="icon-button">${icon("more")}</summary><button class="danger" data-action="dnscrypt.stop" type="button">${icon("stop")}${t("stop")}</button></details>`
+    : actionButton("dnscrypt.start", t("start"), "play");
 
   $("#iconsTitle").innerHTML = `
       ${icon("globe")}
@@ -549,13 +654,10 @@ function renderStatus(data) {
   $("#iconsList").innerHTML = (data.ispIcons.items || [])
     .map((item) => `<article class="isp-icon-item"><img src="${escapeHtml(item.url)}" alt=""><span>${escapeHtml(item.name)}</span></article>`)
     .join("") || `<p>${t("noIcons")}</p>`;
-
-  const dnsActive = isActiveState(data.dnscrypt.service);
-  setActionState("dnscrypt.start", dnsActive ? "state-ok" : "");
-  setActionState("dnscrypt.stop", dnsActive ? "" : "state-bad");
   const iconsActive = Boolean(data.ispIcons.exists && Number(data.ispIcons.icons) > 0);
-  setActionState("icons.install", iconsActive ? "state-ok" : "");
-  setActionState("icons.uninstall", iconsActive ? "" : "state-bad");
+  $("#iconsActions").innerHTML = iconsActive
+    ? `${actionButton("icons.discover", t("update"), "refresh")}<details class="action-menu"><summary class="icon-button">${icon("more")}</summary><button class="danger" data-action="icons.uninstall" type="button">${icon("stop")}${t("stop")}</button></details>`
+    : actionButton("icons.install", t("start"), "play");
 }
 
 function syncProjectSampleHeights() {
@@ -573,6 +675,7 @@ function syncProjectSampleHeights() {
 async function loadEditors() {
   const data = await getJson("/api/files");
   state.files = data.files || {};
+  state.filesLoaded = true;
   document.querySelectorAll("[data-editor]").forEach((editor) => {
     const item = data.files?.[editor.dataset.editor];
     if (!item) return;
@@ -608,12 +711,33 @@ function applyBranding(logoUrl) {
 }
 
 async function refresh() {
-  if (!(await checkAuth())) return;
-  const data = await getJson("/api/status");
-  renderStatus(data);
-  enhanceButtons();
-  await loadLogs();
-  await loadEditors();
+  if (state.refreshing) return;
+  if (!state.me?.authenticated && !(await checkAuth())) return;
+  state.refreshing = true;
+  $("#refreshState").classList.add("loading");
+  $("#connectionsLoader").hidden = false;
+  $("#refreshBtn").disabled = true;
+  const overviewRequest = getJson("/api/overview", { cache: "no-store" });
+  const connectionsRequest = getJson("/api/connections", { cache: "no-store" })
+    .then((data) => renderConnections(data))
+    .catch((error) => showToast(error.message))
+    .finally(() => { $("#connectionsLoader").hidden = true; });
+  try {
+    const data = await overviewRequest;
+    renderStatus(data);
+    enhanceButtons();
+    $("#lastUpdated").textContent = t("updatedNow");
+    const optional = [connectionsRequest];
+    if (state.page === "logs") optional.push(loadLogs());
+    if (state.page === "settings" && !state.filesLoaded) optional.push(loadEditors());
+    const results = await Promise.allSettled(optional);
+    const rejected = results.find((result) => result.status === "rejected");
+    if (rejected) throw rejected.reason;
+  } finally {
+    state.refreshing = false;
+    $("#refreshState").classList.remove("loading");
+    $("#refreshBtn").disabled = false;
+  }
 }
 
 function openEditor(key) {
@@ -642,6 +766,7 @@ async function loadLogs() {
   const target = $("#logTarget").value;
   const data = await getJson(`/api/logs?target=${encodeURIComponent(target)}&lines=160`);
   $("#logBox").textContent = data.log || t("noLogEntries");
+  state.logsLoaded = true;
 }
 
 function showToast(message) {
@@ -728,6 +853,7 @@ async function runAction(action) {
   if (state.busy) return;
   if (action === "dnscrypt.flush-cache" && !window.confirm(t("clearDnsCacheConfirm"))) return;
   if (action === "system.update" && !window.confirm(t("updateProjectConfirm"))) return;
+  if ((action.endsWith(".stop") || action === "icons.uninstall") && !window.confirm(t("stopConfirm"))) return;
   state.busy = true;
   showToast(`${t("running")}: ${action}...`);
   try {
@@ -881,20 +1007,40 @@ async function updateProfile() {
   await checkAuth();
 }
 
-document.addEventListener("click", (event) => {
+document.addEventListener("click", async (event) => {
+  const nav = event.target.closest("[data-nav]");
+  if (nav) showPage(nav.dataset.nav);
+  const pageLink = event.target.closest("[data-go-page]");
+  if (pageLink) {
+    if (pageLink.dataset.goProject) state.projectTab = pageLink.dataset.goProject;
+    showPage(pageLink.dataset.goPage);
+    renderProjects();
+  }
+  const projectTab = event.target.closest("[data-project-tab]");
+  if (projectTab) {
+    state.projectTab = projectTab.dataset.projectTab;
+    renderProjects();
+  }
   const button = event.target.closest("[data-action]");
   if (button) runAction(button.dataset.action);
   const save = event.target.closest("[data-save-editor]");
   if (save) saveEditor(save.dataset.saveEditor);
   const open = event.target.closest("[data-open-editor]");
-  if (open) openEditor(open.dataset.openEditor);
+  if (open) {
+    try {
+      if (!state.filesLoaded) await loadEditors();
+      openEditor(open.dataset.openEditor);
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
   const download = event.target.closest("[data-open-download]");
   if (download) openDownload(download.dataset.openDownload);
   if (event.target.closest("[data-close-modal]")) event.target.closest(".modal").hidden = true;
 });
 
-$("#refreshBtn").addEventListener("click", refresh);
-$("#logTarget").addEventListener("change", loadLogs);
+$("#refreshBtn").addEventListener("click", () => refresh().catch((error) => showToast(error.message)));
+$("#logTarget").addEventListener("change", () => loadLogs().catch((error) => showToast(error.message)));
 $("#loginForm").addEventListener("submit", (event) => {
   event.preventDefault();
   login($("#loginUser").value, $("#loginPass").value).catch((error) => showToast(error.message));
@@ -933,11 +1079,12 @@ $("#languageSelect").addEventListener("change", () => {
   localStorage.setItem("language", state.lang);
   applyLanguage();
   if (state.status) renderStatus(state.status);
+  if (state.connections) renderConnections(state.connections);
 });
 $("#autoRefresh").addEventListener("change", () => {
   clearInterval(state.autoTimer);
   const seconds = Number($("#autoRefresh").value);
-  if (seconds > 0) state.autoTimer = setInterval(refresh, seconds * 1000);
+  if (seconds > 0) state.autoTimer = setInterval(() => refresh().catch((error) => showToast(error.message)), seconds * 1000);
 });
 $("#toggleLogs").addEventListener("click", () => {
   const box = $("#logBox");
@@ -951,6 +1098,7 @@ window.addEventListener("resize", () => {
 });
 document.body.classList.toggle("dark", localStorage.getItem("theme") !== "light");
 state.lang = detectLanguage();
+setupNavigationIcons();
 applyLanguage();
 renderLogToggle();
 enhanceButtons();

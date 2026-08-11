@@ -12,6 +12,7 @@ import hashlib
 import hmac
 import secrets
 import base64
+from concurrent.futures import ThreadPoolExecutor
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -522,7 +523,7 @@ def connection_status(label, iface=None, active_for=None):
         "isp": geo["isp"],
         "asn": geo.get("asn", ""),
         "asname": geo.get("asname", ""),
-        "icon": provider_icon_url(ensure_provider_icon(geo["isp"], geo.get("asn", ""), geo.get("asname", ""))),
+        "icon": provider_icon_url(provider_icon_filename(geo["isp"], geo.get("asn", ""))),
         "flag": ensure_country_flag(geo["countryCode"]),
         "activeFor": active_for or [],
         "active": bool(active_for),
@@ -557,13 +558,12 @@ def connections_status(projects):
         if iface and iface not in ("unknown", "not configured"):
             active_by_iface.setdefault(iface, []).append(project["title"].replace("UniFi ", ""))
 
+    specs = []
     wan_ifaces = wan_interfaces()
-    connections = [
-        connection_status(f"WAN{index}", iface=iface, active_for=active_by_iface.get(iface, []))
-        for index, iface in enumerate(wan_ifaces, 1)
-    ]
-    if not connections:
-        connections = [connection_status("ISP", active_for=[])]
+    for index, iface in enumerate(wan_ifaces, 1):
+        specs.append((f"WAN{index}", iface, active_by_iface.get(iface, [])))
+    if not specs:
+        specs.append(("ISP", None, []))
     names = wg_map_names()
     for iface in wireguard_interfaces():
         active_for = active_by_iface.get(iface, [])
@@ -572,13 +572,9 @@ def connections_status(projects):
             if project.get("activeIface") == iface and project.get("activeName") not in ("unknown", "not configured"):
                 label = project["activeName"]
                 break
-        connections.append(connection_status(label, iface=iface, active_for=active_for))
-    try:
-        generate_provider_icons(connections)
-        for item in connections:
-            item["icon"] = provider_icon_url(provider_icon_filename(item.get("isp", ""), item.get("asn", "")))
-    except OSError:
-        pass
+        specs.append((label, iface, active_for))
+    with ThreadPoolExecutor(max_workers=min(8, len(specs))) as executor:
+        connections = list(executor.map(lambda spec: connection_status(spec[0], spec[1], spec[2]), specs))
     return connections
 
 
@@ -878,22 +874,36 @@ def download_asset(kind, url, filename):
     return {"ok": ok, "output": output}
 
 
-def status_payload():
-    projects = [project_status(key, config) for key, config in PROJECTS.items()]
+def overview_payload():
+    project_items = list(PROJECTS.items())
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        project_futures = [executor.submit(project_status, key, config) for key, config in project_items]
+        dnscrypt_future = executor.submit(dnscrypt_status)
+        icons_future = executor.submit(isp_icons_status)
+        web_active_future = executor.submit(systemctl_value, "is-active", WEB_SERVICE)
+        web_enabled_future = executor.submit(systemctl_value, "is-enabled", WEB_SERVICE)
+        projects = [future.result() for future in project_futures]
+        dnscrypt = dnscrypt_future.result()
+        isp_icons = icons_future.result()
     return {
         "root": str(ROOT),
         "host": HOST,
         "port": PORT,
         "web": {
-            "service": systemctl_value("is-active", WEB_SERVICE),
-            "enabled": systemctl_value("is-enabled", WEB_SERVICE),
+            "service": web_active_future.result(),
+            "enabled": web_enabled_future.result(),
         },
         "generatedAt": int(time.time()),
         "projects": projects,
-        "connections": connections_status(projects),
-        "dnscrypt": dnscrypt_status(),
-        "ispIcons": isp_icons_status(),
+        "dnscrypt": dnscrypt,
+        "ispIcons": isp_icons,
     }
+
+
+def status_payload():
+    payload = overview_payload()
+    payload["connections"] = connections_status(payload["projects"])
+    return payload
 
 
 def action_command(action):
@@ -1038,6 +1048,20 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if parsed.path == "/api/status":
             self.send_json(status_payload())
+            return
+        if parsed.path == "/api/overview":
+            self.send_json(overview_payload())
+            return
+        if parsed.path == "/api/connections":
+            projects = [
+                {
+                    "title": config["title"],
+                    "activeIface": read_text(config["dir"] / "active-iface", "unknown"),
+                    "activeName": read_text(config["dir"] / "active-name", "not configured"),
+                }
+                for config in PROJECTS.values()
+            ]
+            self.send_json({"connections": connections_status(projects), "generatedAt": int(time.time())})
             return
         if parsed.path == "/api/files":
             self.send_json(editable_payload())

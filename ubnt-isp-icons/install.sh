@@ -59,9 +59,12 @@ patch_unifi_paths() {
 
   for BUNDLE in "$APP"/react/js/swai.*.js; do
     [ -f "$BUNDLE" ] || continue
+    case "$BUNDLE" in
+      *.urm.js) continue ;;
+    esac
 
     log "Patching $BUNDLE"
-    cp "$BUNDLE" "$BUNDLE.bak-app-assets-isp-paths"
+    [ -f "$BUNDLE.bak-app-assets-isp-paths" ] || cp "$BUNDLE" "$BUNDLE.bak-app-assets-isp-paths"
 
     sed -i 's#asnPath:"/manage/angular/[^"]*/custom-icons/asn/"#asnPath:`${o}/asn/`#g' "$BUNDLE"
     sed -i 's#ispPath:"/manage/angular/[^"]*/custom-icons/isp/"#ispPath:`${o}/isp/`#g' "$BUNDLE"
@@ -69,6 +72,25 @@ patch_unifi_paths() {
     sed -i 's#ispPath:"/app-assets/network/react/images/topology/isp/name/"#ispPath:`${o}/isp/`#g' "$BUNDLE"
     sed -i 's#asnPath:`${o}/asn/`#asnPath:"/app-assets/network/react/images/topology/isp/asn/"#g' "$BUNDLE"
     sed -i 's#ispPath:`${o}/isp/`#ispPath:"/app-assets/network/react/images/topology/isp/name/"#g' "$BUNDLE"
+
+    # UniFi serves hashed bundles with a long immutable browser cache. Reusing
+    # the original filename leaves clients running the unpatched CDN paths.
+    OLD_NAME="$(basename "$BUNDLE")"
+    NEW_NAME="${OLD_NAME%.js}.urm.js"
+    CACHE_BUSTED="$(dirname "$BUNDLE")/$NEW_NAME"
+    cp "$BUNDLE" "$CACHE_BUSTED"
+    chmod 644 "$CACHE_BUSTED"
+
+    for INDEX in \
+      "$APP/manifest.json" \
+      "$APP/react/js/stats.json" \
+      "$APP"/hybrid-swai-*.js \
+      "$APP"/angular/*/js/index.js \
+      "$APP"/angular/*/js/base.js; do
+      [ -f "$INDEX" ] || continue
+      sed -i "s#$OLD_NAME#$NEW_NAME#g" "$INDEX"
+    done
+    log "Cache-busted UniFi bundle: $OLD_NAME -> $NEW_NAME"
   done
 }
 
