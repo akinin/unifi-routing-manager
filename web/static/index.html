@@ -73,6 +73,13 @@
 
       <div class="page active" data-page="overview">
         <section class="service-overview" id="serviceOverview"></section>
+        <section class="panel monitoring-panel" id="monitoring">
+          <div class="panel-head">
+            <div><h2 data-i18n="channelMonitoring">Channel monitoring</h2><p data-i18n="channelMonitoringText">Availability and latency during the latest checks.</p></div>
+            <span class="section-loader" id="monitoringLoader" hidden></span>
+          </div>
+          <div class="monitoring-grid" id="monitoringGrid"><p class="empty" data-i18n="loading">Loading...</p></div>
+        </section>
         <section class="panel" id="connections">
           <div class="panel-head">
             <div><h2 data-i18n="connections">Connections</h2><p data-i18n="connectionsText">External IP, country and provider for direct access and WireGuard tunnels.</p></div>
@@ -184,6 +191,18 @@
             <button data-save-editor="wg.map" data-i18n="save">Save</button>
           </article>
         </div>
+      </section>
+      <section class="panel notification-panel">
+        <div class="panel-head">
+          <div><h2 data-i18n="notifications">Notifications</h2><p data-i18n="notificationsText">Telegram or HTTPS webhook alerts for outages and external IP changes.</p></div>
+        </div>
+        <form class="notification-form" id="notificationForm">
+          <label class="switch-row"><input id="notificationsEnabled" type="checkbox"><span data-i18n="enableNotifications">Enable notifications</span></label>
+          <label><span>Telegram Bot Token</span><input id="telegramBotToken" type="password" autocomplete="off" placeholder="Leave empty to keep current token" data-i18n-placeholder="keepToken"></label>
+          <label><span>Telegram Chat ID</span><input id="telegramChatId" autocomplete="off" placeholder="123456789"></label>
+          <label><span>HTTPS Webhook</span><input id="notificationWebhook" type="url" autocomplete="off" placeholder="https://..."></label>
+          <div class="actions"><button class="primary" type="submit" data-i18n="save">Save</button><button id="testNotificationBtn" type="button" data-i18n="testNotification">Test notification</button></div>
+        </form>
       </section>
       </div>
 

@@ -1432,6 +1432,99 @@ body.dark .title-row .icon.brand-mark {
   margin-bottom: 18px;
 }
 
+.monitoring-grid {
+  padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.monitoring-card {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--panel-raised);
+}
+
+.monitoring-title,
+.monitoring-meta {
+  display: grid;
+  align-items: center;
+}
+
+.monitoring-title {
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+}
+
+.monitoring-title > span:last-child {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.monitoring-chart {
+  width: 100%;
+  height: 42px;
+  margin: 10px 0 6px;
+  overflow: visible;
+}
+
+.monitoring-chart polyline {
+  fill: none;
+  stroke: var(--blue);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.monitoring-meta {
+  grid-template-columns: 1fr auto 1fr auto;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.monitoring-meta strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.notification-form {
+  padding: 18px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.notification-form label {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.notification-form input:not([type="checkbox"]) {
+  width: 100%;
+}
+
+.notification-form .switch-row,
+.notification-form .actions {
+  grid-column: 1 / -1;
+}
+
+.notification-form .switch-row {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.notification-form input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+
 .service-card {
   height: auto;
   min-height: 92px;
@@ -1983,6 +2076,7 @@ body.dark .title-row .icon.brand-mark {
   }
 
   main {
+    padding-top: calc(14px + env(safe-area-inset-top));
     padding-bottom: calc(98px + env(safe-area-inset-bottom));
   }
 
@@ -2041,7 +2135,7 @@ body.dark .title-row .icon.brand-mark {
   .mobile-tab[data-nav="overview"] {
     width: min(64px, calc(100% - 2px));
     height: 64px;
-    margin-top: -18px;
+    margin-top: -10px;
     justify-self: center;
     padding: 7px 3px 5px;
     border: 1px solid rgba(255, 255, 255, .2);
@@ -2097,6 +2191,16 @@ body.dark .title-row .icon.brand-mark {
   .mobile-more-menu .mdi-icon {
     width: 20px;
     height: 20px;
+  }
+
+  .monitoring-grid,
+  .notification-form {
+    grid-template-columns: 1fr;
+  }
+
+  .notification-form .switch-row,
+  .notification-form .actions {
+    grid-column: auto;
   }
 
   .sidebar-nav {

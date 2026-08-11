@@ -27,6 +27,21 @@ class ValidationTests(unittest.TestCase):
         duplicate = server.validate_editable_content("wg.map", "180.wgclt7 wgclt7 WG-DE\n180.wgclt7 wgclt8 WG-CH\n")
         self.assertFalse(duplicate["ok"])
 
+    def test_change_preview(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "domains.txt"
+            path.write_text("ui.com\nold.example\n", encoding="utf-8")
+            original = server.EDITABLE_FILES
+            try:
+                server.EDITABLE_FILES = {**original, "cloud.domains": path}
+                result = server.validate_editable_content("cloud.domains", "ui.com\nnew.example\n")
+                self.assertTrue(result["ok"])
+                self.assertEqual(result["preview"]["added"], 1)
+                self.assertEqual(result["preview"]["removed"], 1)
+                self.assertIn("new.example", result["preview"]["diff"])
+            finally:
+                server.EDITABLE_FILES = original
+
 
 class BackupTests(unittest.TestCase):
     def test_backup_and_restore_roundtrip(self):

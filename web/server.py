@@ -16,6 +16,8 @@ import binascii
 import ipaddress
 import tarfile
 import tempfile
+import difflib
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -82,6 +84,10 @@ AVATAR_DIR = ROOT / "web-data"
 SESSION_TTL = 86400
 BACKUP_DIR = ROOT / "backups"
 BACKUP_LIMIT = 20
+MONITOR_FILE = ROOT / "monitor-history.json"
+NOTIFICATION_FILE = ROOT / "notification-settings.json"
+MONITOR_LOCK = threading.Lock()
+MONITOR_INTERVAL = 60
 WEBAUTHN_CHALLENGES = {}
 WEBAUTHN_LOCK = threading.Lock()
 LOGIN_ATTEMPTS = {}
@@ -100,7 +106,7 @@ VIEW_ONLY_FILES = {
     },
 }
 
-CONFIG_BACKUP_PATHS = tuple(dict.fromkeys(EDITABLE_FILES.values()))
+CONFIG_BACKUP_PATHS = tuple(dict.fromkeys((*EDITABLE_FILES.values(), NOTIFICATION_FILE)))
 
 
 def read_text(path, default=""):
@@ -140,11 +146,21 @@ def editable_lines(content):
     return [line.strip() for line in content.replace("\r\n", "\n").replace("\r", "\n").splitlines() if line.strip() and not line.lstrip().startswith("#")]
 
 
+def change_preview(key, content):
+    path = EDITABLE_FILES.get(key)
+    before = read_text(path, "").splitlines() if path else []
+    after = content.replace("\r\n", "\n").replace("\r", "\n").strip().splitlines()
+    diff = list(difflib.unified_diff(before, after, fromfile="current", tofile="new", lineterm=""))
+    added = sum(1 for line in diff if line.startswith("+") and not line.startswith("+++"))
+    removed = sum(1 for line in diff if line.startswith("-") and not line.startswith("---"))
+    return {"changed": bool(diff), "added": added, "removed": removed, "diff": "\n".join(diff[:160])}
+
+
 def validate_editable_content(key, content):
     if key not in EDITABLE_FILES:
-        return {"ok": False, "errors": ["Unknown editable file"], "warnings": [], "entries": 0}
+        return {"ok": False, "errors": ["Unknown editable file"], "warnings": [], "entries": 0, "preview": {}}
     if not isinstance(content, str) or "\x00" in content or len(content.encode("utf-8")) > 1024 * 1024:
-        return {"ok": False, "errors": ["Invalid or oversized content"], "warnings": [], "entries": 0}
+        return {"ok": False, "errors": ["Invalid or oversized content"], "warnings": [], "entries": 0, "preview": {}}
 
     lines = editable_lines(content)
     errors = []
@@ -192,7 +208,7 @@ def validate_editable_content(key, content):
 
     if not lines:
         errors.append("At least one entry is required")
-    return {"ok": not errors, "errors": errors, "warnings": list(dict.fromkeys(warnings)), "entries": len(lines)}
+    return {"ok": not errors, "errors": errors, "warnings": list(dict.fromkeys(warnings)), "entries": len(lines), "preview": change_preview(key, content)}
 
 
 def backup_item(path):
@@ -683,7 +699,7 @@ def external_ip(iface=None):
         value = result["output"].splitlines()[0].strip() if result["ok"] and result["output"] else "N/A"
         return value if re.match(r"^\d+\.\d+\.\d+\.\d+$", value) else "N/A"
 
-    return cached_value(key, 300, produce)
+    return cached_value(key, 60, produce)
 
 
 def ip_geo(ip):
@@ -865,6 +881,131 @@ def connection_status(label, iface=None, active_for=None):
         "activeFor": active_for or [],
         "active": bool(active_for),
     }
+
+
+def probe_connection(iface=None):
+    command = ["ping", "-4", "-c", "1", "-W", "1"]
+    if iface:
+        command.extend(["-I", iface])
+    command.append("1.1.1.1")
+    started = time.monotonic()
+    result = run(command, timeout=3)
+    elapsed = round((time.monotonic() - started) * 1000, 1)
+    match = re.search(r"time[=<]([0-9.]+)\s*ms", result["output"])
+    return {"online": result["ok"], "latencyMs": float(match.group(1)) if match else (elapsed if result["ok"] else None)}
+
+
+def notification_settings(include_secret=False):
+    data = read_json(NOTIFICATION_FILE, {})
+    result = {
+        "enabled": bool(data.get("enabled")),
+        "telegramChatId": str(data.get("telegramChatId") or ""),
+        "telegramConfigured": bool(data.get("telegramBotToken") and data.get("telegramChatId")),
+        "webhookUrl": str(data.get("webhookUrl") or ""),
+    }
+    if include_secret:
+        result["telegramBotToken"] = str(data.get("telegramBotToken") or "")
+    return result
+
+
+def save_notification_settings(payload):
+    current = notification_settings(include_secret=True)
+    token = str(payload.get("telegramBotToken") or "").strip() or current.get("telegramBotToken", "")
+    chat_id = str(payload.get("telegramChatId") or "").strip()
+    webhook = str(payload.get("webhookUrl") or "").strip()
+    if token and not re.match(r"^\d+:[A-Za-z0-9_-]{20,}$", token):
+        return {"ok": False, "output": "Invalid Telegram bot token"}
+    if webhook and not webhook.startswith("https://"):
+        return {"ok": False, "output": "Webhook URL must use HTTPS"}
+    data = {"enabled": bool(payload.get("enabled")), "telegramBotToken": token, "telegramChatId": chat_id, "webhookUrl": webhook}
+    write_json(NOTIFICATION_FILE, data)
+    os.chmod(NOTIFICATION_FILE, 0o600)
+    return {"ok": True, "settings": notification_settings(), "output": "Notification settings saved"}
+
+
+def send_notification(message):
+    settings = notification_settings(include_secret=True)
+    if not settings.get("enabled"):
+        return {"ok": False, "output": "Notifications are disabled"}
+    results = []
+    targets = 0
+    token, chat_id = settings.get("telegramBotToken"), settings.get("telegramChatId")
+    if token and chat_id:
+        targets += 1
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        body = json.dumps({"chat_id": chat_id, "text": message}).encode("utf-8")
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}), timeout=8) as response:
+                results.append(response.status == 200)
+        except OSError:
+            results.append(False)
+    webhook = settings.get("webhookUrl")
+    if webhook:
+        targets += 1
+        body = json.dumps({"text": message, "source": "URM", "timestamp": int(time.time())}).encode("utf-8")
+        try:
+            with urllib.request.urlopen(urllib.request.Request(webhook, data=body, headers={"Content-Type": "application/json"}), timeout=8) as response:
+                results.append(200 <= response.status < 300)
+        except OSError:
+            results.append(False)
+    return {"ok": bool(targets and all(results)), "output": f"Delivered to {sum(results)}/{targets} targets" if targets else "No notification target configured"}
+
+
+def record_monitoring(connections):
+    now = int(time.time())
+    messages = []
+    with MONITOR_LOCK:
+        data = read_json(MONITOR_FILE, {"connections": {}})
+        history = data.setdefault("connections", {})
+        for item in connections:
+            key = item.get("iface") or item.get("label") or "direct"
+            samples = history.setdefault(key, [])
+            sample = {"time": now, "online": bool(item.get("online")), "latencyMs": item.get("latencyMs"), "ip": item.get("ip", "N/A")}
+            previous = samples[-1] if samples else None
+            samples.append(sample)
+            history[key] = samples[-120:]
+            if previous:
+                if previous.get("online") != sample["online"]:
+                    messages.append(f"URM: {item.get('label', key)} is {'online' if sample['online'] else 'offline'}")
+                if sample["online"] and previous.get("ip") not in (None, "N/A") and previous.get("ip") != sample["ip"]:
+                    messages.append(f"URM: {item.get('label', key)} external IP changed: {previous.get('ip')} → {sample['ip']}")
+        data["updatedAt"] = now
+        write_json(MONITOR_FILE, data)
+    for message in messages:
+        threading.Thread(target=send_notification, args=(message,), daemon=True).start()
+
+
+def monitored_connections():
+    projects = [
+        {"title": config["title"], "activeIface": read_text(config["dir"] / "active-iface", "unknown"), "activeName": read_text(config["dir"] / "active-name", "not configured")}
+        for config in PROJECTS.values()
+    ]
+    connections = connections_status(projects)
+    with ThreadPoolExecutor(max_workers=min(8, len(connections))) as executor:
+        probes = list(executor.map(lambda item: probe_connection(item.get("iface") or None), connections))
+    for item, probe in zip(connections, probes):
+        item.update(probe)
+    record_monitoring(connections)
+    return connections
+
+
+def monitoring_payload():
+    data = read_json(MONITOR_FILE, {"connections": {}, "updatedAt": 0})
+    items = []
+    for key, samples in data.get("connections", {}).items():
+        recent = samples[-30:]
+        online_count = sum(1 for sample in recent if sample.get("online"))
+        items.append({"id": key, "samples": recent, "availability": round(100 * online_count / len(recent), 1) if recent else 0})
+    return {"updatedAt": data.get("updatedAt", 0), "items": items, "notifications": notification_settings()}
+
+
+def monitor_worker():
+    while True:
+        try:
+            monitored_connections()
+        except Exception as error:
+            print(f"Monitoring error: {error}", file=sys.stderr)
+        time.sleep(MONITOR_INTERVAL)
 
 
 def wireguard_interfaces():
@@ -1489,15 +1630,13 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json(overview_payload())
             return
         if parsed.path == "/api/connections":
-            projects = [
-                {
-                    "title": config["title"],
-                    "activeIface": read_text(config["dir"] / "active-iface", "unknown"),
-                    "activeName": read_text(config["dir"] / "active-name", "not configured"),
-                }
-                for config in PROJECTS.values()
-            ]
-            self.send_json({"connections": connections_status(projects), "generatedAt": int(time.time())})
+            self.send_json({"connections": monitored_connections(), "generatedAt": int(time.time())})
+            return
+        if parsed.path == "/api/monitoring":
+            self.send_json(monitoring_payload())
+            return
+        if parsed.path == "/api/notifications":
+            self.send_json(notification_settings())
             return
         if parsed.path == "/api/files":
             self.send_json(editable_payload())
@@ -1554,7 +1693,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({"ok": False, "output": "HTTPS is required"}, 403)
             return
         parsed = urlparse(self.path)
-        if parsed.path not in ("/api/action", "/api/files", "/api/files/validate", "/api/diagnostics", "/api/backups/create", "/api/backups/restore", "/api/auth/login", "/api/auth/logout", "/api/auth/passkey/options", "/api/auth/passkey/verify", "/api/auth/passkey/register/options", "/api/auth/passkey/register", "/api/auth/avatar", "/api/auth/logo", "/api/auth/profile", "/api/assets/download"):
+        if parsed.path not in ("/api/action", "/api/files", "/api/files/validate", "/api/diagnostics", "/api/backups/create", "/api/backups/restore", "/api/notifications", "/api/notifications/test", "/api/auth/login", "/api/auth/logout", "/api/auth/passkey/options", "/api/auth/passkey/verify", "/api/auth/passkey/register/options", "/api/auth/passkey/register", "/api/auth/avatar", "/api/auth/logo", "/api/auth/profile", "/api/assets/download"):
             self.send_json({"ok": False, "output": "Not found"}, 404)
             return
         origin = self.headers.get("Origin", "")
@@ -1762,6 +1901,14 @@ class Handler(SimpleHTTPRequestHandler):
             validation = validate_editable_content(payload.get("key", ""), payload.get("content", ""))
             self.send_json(validation)
             return
+        if parsed.path == "/api/notifications":
+            result = save_notification_settings(payload)
+            self.send_json(result, 200 if result["ok"] else 400)
+            return
+        if parsed.path == "/api/notifications/test":
+            result = send_notification("URM: test notification")
+            self.send_json(result, 200 if result["ok"] else 400)
+            return
         if parsed.path == "/api/files":
             result = save_editable_file(payload.get("key", ""), payload.get("content", ""))
             self.send_json(result, 200 if result["ok"] else 400)
@@ -1786,6 +1933,7 @@ def main():
         print(f"ERROR: {error}", file=sys.stderr)
         sys.exit(1)
 
+    threading.Thread(target=monitor_worker, daemon=True, name="urm-monitor").start()
     try:
         server = ThreadingHTTPServer((HOST, PORT), Handler)
     except OSError as error:

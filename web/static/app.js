@@ -14,6 +14,7 @@ const state = {
   filesLoaded: false,
   connections: null,
   maintenanceLoaded: false,
+  notificationsLoaded: false,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -52,6 +53,17 @@ const translations = {
     autoOff: "Auto off",
     connections: "Connections",
     connectionsText: "External IP, country and provider for direct access and WireGuard tunnels.",
+    channelMonitoring: "Channel monitoring",
+    channelMonitoringText: "Availability and latency during the latest checks.",
+    availability: "Availability",
+    latency: "Latency",
+    notifications: "Notifications",
+    notificationsText: "Telegram or HTTPS webhook alerts for outages and external IP changes.",
+    enableNotifications: "Enable notifications",
+    keepToken: "Leave empty to keep current token",
+    testNotification: "Test notification",
+    notificationSaved: "Notification settings saved",
+    changePreview: "Change preview",
     start: "Start",
     restart: "Restart",
     stop: "Stop",
@@ -197,6 +209,17 @@ const translations = {
     autoOff: "Авто выкл.",
     connections: "Подключения",
     connectionsText: "Внешний IP, страна и провайдер для прямого доступа и WireGuard.",
+    channelMonitoring: "Мониторинг каналов",
+    channelMonitoringText: "Доступность и задержка за последние проверки.",
+    availability: "Доступность",
+    latency: "Задержка",
+    notifications: "Уведомления",
+    notificationsText: "Оповещения в Telegram или HTTPS webhook о сбоях и смене внешнего IP.",
+    enableNotifications: "Включить уведомления",
+    keepToken: "Оставьте пустым, чтобы сохранить текущий токен",
+    testNotification: "Проверить уведомление",
+    notificationSaved: "Настройки уведомлений сохранены",
+    changePreview: "Предварительный просмотр изменений",
     start: "Старт",
     restart: "Рестарт",
     stop: "Стоп",
@@ -358,7 +381,10 @@ function showPage(page) {
   updatePageHeader();
   if (page === "health" && !state.maintenanceLoaded) loadBackups().catch((error) => showToast(error.message));
   if (page === "logs" && !state.logsLoaded) loadLogs().catch((error) => showToast(error.message));
-  if (page === "settings" && !state.filesLoaded) loadEditors().catch((error) => showToast(error.message));
+  if (page === "settings") {
+    if (!state.filesLoaded) loadEditors().catch((error) => showToast(error.message));
+    if (!state.notificationsLoaded) loadNotificationSettings().catch((error) => showToast(error.message));
+  }
 }
 
 function setupNavigationIcons() {
@@ -525,6 +551,29 @@ function renderConnections(data) {
           `;
         })
         .join("")}</tbody></table></div>`
+    : `<p class="empty">${t("noConnectionData")}</p>`;
+}
+
+function monitoringSparkline(samples) {
+  const values = samples.map((sample) => Number(sample.latencyMs)).filter(Number.isFinite);
+  if (values.length < 2) return `<span class="monitoring-empty">—</span>`;
+  const max = Math.max(...values, 1);
+  const points = values.map((value, index) => `${(index * 100) / (values.length - 1)},${28 - (value / max) * 24}`).join(" ");
+  return `<svg class="monitoring-chart" viewBox="0 0 100 32" preserveAspectRatio="none" aria-hidden="true"><polyline points="${points}"></polyline></svg>`;
+}
+
+function renderMonitoring(data) {
+  const items = data.items || [];
+  $("#monitoringGrid").innerHTML = items.length
+    ? items.map((item) => {
+      const latest = item.samples?.at(-1) || {};
+      const latency = Number.isFinite(Number(latest.latencyMs)) ? `${Math.round(Number(latest.latencyMs))} ms` : "—";
+      return `<article class="monitoring-card">
+        <div class="monitoring-title"><span class="status-dot ${latest.online ? "ok" : "bad"}"></span><strong>${escapeHtml(item.id)}</strong><span>${escapeHtml(String(item.availability))}%</span></div>
+        ${monitoringSparkline(item.samples || [])}
+        <div class="monitoring-meta"><span>${t("latency")}</span><strong>${latency}</strong><span>${t("availability")}</span><strong>${escapeHtml(String(item.availability))}%</strong></div>
+      </article>`;
+    }).join("")
     : `<p class="empty">${t("noConnectionData")}</p>`;
 }
 
@@ -726,6 +775,36 @@ async function loadEditors() {
   });
 }
 
+async function loadNotificationSettings() {
+  const data = await getJson("/api/notifications", { cache: "no-store" });
+  $("#notificationsEnabled").checked = Boolean(data.enabled);
+  $("#telegramBotToken").value = "";
+  $("#telegramBotToken").placeholder = data.telegramConfigured ? "••••••••••••" : t("keepToken");
+  $("#telegramChatId").value = data.telegramChatId || "";
+  $("#notificationWebhook").value = data.webhookUrl || "";
+  state.notificationsLoaded = true;
+}
+
+async function saveNotificationSettings() {
+  const result = await getJson("/api/notifications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      enabled: $("#notificationsEnabled").checked,
+      telegramBotToken: $("#telegramBotToken").value,
+      telegramChatId: $("#telegramChatId").value,
+      webhookUrl: $("#notificationWebhook").value,
+    }),
+  });
+  showToast(result.output || t("notificationSaved"));
+  await loadNotificationSettings();
+}
+
+async function testNotification() {
+  const result = await getJson("/api/notifications/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  showToast(result.output || t("done"));
+}
+
 function renderUserIdentity(me) {
   const initials = (me.name || me.username || "UR").slice(0, 2).toUpperCase();
   $("#avatarInitials").textContent = initials;
@@ -769,20 +848,26 @@ async function refresh() {
   state.refreshing = true;
   $("#refreshState").classList.add("loading");
   $("#connectionsLoader").hidden = false;
+  $("#monitoringLoader").hidden = false;
   $("#refreshBtn").disabled = true;
   const overviewRequest = getJson("/api/overview", { cache: "no-store" });
   const connectionsRequest = getJson("/api/connections", { cache: "no-store" })
     .then((data) => renderConnections(data))
     .catch((error) => showToast(error.message))
     .finally(() => { $("#connectionsLoader").hidden = true; });
+  const monitoringRequest = connectionsRequest
+    .then(() => getJson("/api/monitoring", { cache: "no-store" }))
+    .then((data) => renderMonitoring(data))
+    .finally(() => { $("#monitoringLoader").hidden = true; });
   try {
     const data = await overviewRequest;
     renderStatus(data);
     enhanceButtons();
     $("#lastUpdated").textContent = t("updatedNow");
-    const optional = [connectionsRequest];
+    const optional = [connectionsRequest, monitoringRequest];
     if (state.page === "logs") optional.push(loadLogs());
     if (state.page === "settings" && !state.filesLoaded) optional.push(loadEditors());
+    if (state.page === "settings" && !state.notificationsLoaded) optional.push(loadNotificationSettings());
     const results = await Promise.allSettled(optional);
     const rejected = results.find((result) => result.status === "rejected");
     if (rejected) throw rejected.reason;
@@ -1031,6 +1116,13 @@ async function saveEditor(key) {
   }
   if (!validation.ok) return;
   if (validation.warnings?.length && !window.confirm(validation.warnings.join("\n"))) return;
+  const preview = validation.preview || {};
+  if (!preview.changed) {
+    showToast(`${t("changePreview")}: 0`);
+    return;
+  }
+  const summary = `${t("changePreview")}: +${preview.added || 0} / −${preview.removed || 0}`;
+  if (!window.confirm(`${summary}\n\n${preview.diff || ""}`)) return;
   const result = await getJson("/api/files", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1301,6 +1393,11 @@ $("#profileForm").addEventListener("submit", (event) => {
   event.preventDefault();
   updateProfile().catch((error) => showToast(error.message));
 });
+$("#notificationForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  saveNotificationSettings().catch((error) => showToast(error.message));
+});
+$("#testNotificationBtn").addEventListener("click", () => testNotification().catch((error) => showToast(error.message)));
 $("#logoutBtn").addEventListener("click", logout);
 $("#themeBtn").addEventListener("click", () => {
   document.body.classList.toggle("dark");
