@@ -1454,6 +1454,60 @@ body.dark .title-row .icon.brand-mark {
   gap: 12px;
 }
 
+.monitoring-actions {
+  position: relative;
+}
+
+.monitoring-picker {
+  position: relative;
+}
+
+.monitoring-picker summary {
+  height: 38px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--text);
+  background: var(--panel);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.monitoring-picker summary::-webkit-details-marker { display: none; }
+
+.monitoring-picker[open] > div {
+  position: absolute;
+  z-index: 12;
+  top: 44px;
+  right: 0;
+  width: 210px;
+  padding: 7px;
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line-soft);
+  border-radius: 11px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.monitoring-picker label {
+  min-width: 0;
+  padding: 7px 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 7px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.monitoring-picker label:hover { background: var(--hover); }
+.monitoring-picker input { width: 17px; height: 17px; }
+
 .monitoring-card {
   min-width: 0;
   padding: 13px;
@@ -2368,6 +2422,18 @@ body.dark .title-row .icon.brand-mark {
   .monitoring-grid,
   .notification-form {
     grid-template-columns: 1fr;
+  }
+
+  .monitoring-actions {
+    width: 100%;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+  }
+
+  .monitoring-picker summary,
+  #monitoringRange {
+    width: 100%;
+    justify-content: center;
   }
 
   .notification-form .switch-row,

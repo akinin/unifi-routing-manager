@@ -18,6 +18,7 @@ const state = {
   eventsLoaded: false,
   lastEventTime: Number(localStorage.getItem("lastEventTime") || 0),
   eventTimer: null,
+  monitoring: null,
 };
 
 document.documentElement.classList.toggle("standalone", window.matchMedia("(display-mode: standalone)").matches || Boolean(window.navigator.standalone));
@@ -112,6 +113,7 @@ const translations = {
     dailyDigestEnabled: "Daily summary",
     dailyDigestHour: "Summary hour",
     deferredNotification: "Delayed by quiet hours",
+    monitoringCards: "Cards",
     telegramTransport: "Telegram transport",
     transportAuto: "WSS with HTTPS fallback",
     telegramWssUrl: "Telegram WSS relay",
@@ -318,6 +320,7 @@ const translations = {
     dailyDigestEnabled: "Ежедневная сводка",
     dailyDigestHour: "Час отправки сводки",
     deferredNotification: "Отложено до конца тихих часов",
+    monitoringCards: "Карточки",
     telegramTransport: "Транспорт Telegram",
     transportAuto: "WSS с резервным HTTPS",
     telegramWssUrl: "WSS relay Telegram",
@@ -674,9 +677,15 @@ function monitoringSparkline(samples) {
 }
 
 function renderMonitoring(data) {
+  state.monitoring = data;
   const items = data.items || [];
-  $("#monitoringGrid").innerHTML = items.length
-    ? items.map((item) => {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem("monitoringCards") || "null"); } catch { localStorage.removeItem("monitoringCards"); }
+  const selected = Array.isArray(saved) ? new Set(saved) : new Set(items.map((item) => item.id));
+  $("#monitoringCardPicker").innerHTML = items.map((item) => `<label><input type="checkbox" data-monitor-card="${escapeHtml(item.id)}" ${selected.has(item.id) ? "checked" : ""}><span>${escapeHtml(item.label || item.id)}</span></label>`).join("");
+  const visible = items.filter((item) => selected.has(item.id));
+  $("#monitoringGrid").innerHTML = visible.length
+    ? visible.map((item) => {
       const latest = item.samples?.at(-1) || {};
       const latency = Number.isFinite(Number(latest.latencyMs)) ? `${Math.round(Number(latest.latencyMs))} ms` : "—";
       return `<article class="monitoring-card">
@@ -1632,6 +1641,11 @@ $("#testNotificationBtn").addEventListener("click", () => testNotification().cat
 $("#enablePwaNotifications").addEventListener("click", () => enablePwaNotifications().catch((error) => showToast(error.message)));
 $("#eventTypeFilter").addEventListener("change", () => loadEvents().catch((error) => showToast(error.message)));
 $("#monitoringRange").addEventListener("change", () => refresh().catch((error) => showToast(error.message)));
+$("#monitoringCardPicker").addEventListener("change", () => {
+  const selected = [...document.querySelectorAll("[data-monitor-card]:checked")].map((input) => input.dataset.monitorCard);
+  localStorage.setItem("monitoringCards", JSON.stringify(selected));
+  if (state.monitoring) renderMonitoring(state.monitoring);
+});
 $("#exportEventsCsv").addEventListener("click", () => { window.location.href = "/api/events/export?format=csv"; });
 $("#exportEventsJson").addEventListener("click", () => { window.location.href = "/api/events/export?format=json"; });
 $("#unreadEventsOnly").addEventListener("change", () => loadEvents().catch((error) => showToast(error.message)));

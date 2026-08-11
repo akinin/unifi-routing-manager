@@ -92,8 +92,10 @@ BACKUP_LIMIT = 20
 MONITOR_FILE = ROOT / "monitor-history.json"
 NOTIFICATION_FILE = ROOT / "notification-settings.json"
 EVENT_FILE = ROOT / "events.json"
+GEO_CACHE_FILE = ROOT / "geo-cache.json"
 MONITOR_LOCK = threading.Lock()
 EVENT_LOCK = threading.Lock()
+GEO_LOCK = threading.Lock()
 MONITOR_INTERVAL = 60
 EVENT_LIMIT = 500
 WEBAUTHN_CHALLENGES = {}
@@ -682,7 +684,7 @@ def run(command, timeout=20):
         return {"ok": False, "code": 124, "output": "Command timed out"}
 
 
-def cached_value(key, ttl, producer):
+def cached_value(key, ttl, producer, cache_if=None):
     now = time.time()
     with NET_CACHE_LOCK:
         cached = NET_CACHE.get(key)
@@ -690,8 +692,9 @@ def cached_value(key, ttl, producer):
             return cached["value"]
 
     value = producer()
-    with NET_CACHE_LOCK:
-        NET_CACHE[key] = {"time": now, "value": value}
+    if cache_if is None or cache_if(value):
+        with NET_CACHE_LOCK:
+            NET_CACHE[key] = {"time": now, "value": value}
     return value
 
 
@@ -717,30 +720,44 @@ def ip_geo(ip):
         if not ip or ip == "N/A":
             return {"country": "N/A", "countryCode": "N/A", "isp": "N/A", "asn": "", "asname": ""}
 
-        result = run(
-            ["curl", "--connect-timeout", "3", "-sS", f"http://ip-api.com/json/{ip}?fields=country,countryCode,isp,as,asname"],
-            timeout=6,
-        )
-        if not result["ok"] or not result["output"]:
-            return {"country": "Unknown", "countryCode": "Unknown", "isp": "Unknown", "asn": "", "asname": ""}
+        sources = [
+            (f"http://ip-api.com/json/{ip}?fields=status,country,countryCode,isp,as,asname", "ip-api"),
+            (f"https://ipwho.is/{ip}", "ipwhois"),
+        ]
+        geo = None
+        for url, source in sources:
+            result = run(["curl", "-4", "--connect-timeout", "3", "--max-time", "6", "-sS", url], timeout=8)
+            if not result["ok"] or not result["output"]:
+                continue
+            try:
+                data = json.loads(result["output"])
+            except json.JSONDecodeError:
+                continue
+            if source == "ip-api" and data.get("status") != "success":
+                continue
+            if source == "ipwhois" and not data.get("success"):
+                continue
+            if source == "ip-api":
+                as_text = data.get("as") or ""
+                asn_match = re.search(r"\bAS(\d+)\b", as_text)
+                geo = {"country": data.get("country"), "countryCode": data.get("countryCode"), "isp": data.get("isp"), "asn": asn_match.group(1) if asn_match else "", "asname": data.get("asname") or ""}
+            else:
+                connection = data.get("connection") or {}
+                geo = {"country": data.get("country"), "countryCode": data.get("country_code"), "isp": connection.get("isp") or connection.get("org"), "asn": str(connection.get("asn") or ""), "asname": connection.get("org") or ""}
+            if geo.get("countryCode") and geo.get("isp"):
+                geo = {key: value or "" for key, value in geo.items()}
+                with GEO_LOCK:
+                    persistent = read_json(GEO_CACHE_FILE, {})
+                    persistent[ip] = {"time": int(time.time()), **geo}
+                    write_json(GEO_CACHE_FILE, persistent)
+                return geo
+        with GEO_LOCK:
+            stale = read_json(GEO_CACHE_FILE, {}).get(ip)
+        if stale:
+            return {key: stale.get(key, "") for key in ("country", "countryCode", "isp", "asn", "asname")}
+        return {"country": "Unknown", "countryCode": "Unknown", "isp": "Unknown", "asn": "", "asname": ""}
 
-        try:
-            data = json.loads(result["output"])
-        except json.JSONDecodeError:
-            return {"country": "Unknown", "countryCode": "Unknown", "isp": "Unknown", "asn": "", "asname": ""}
-
-        as_text = data.get("as") or ""
-        asn_match = re.search(r"\bAS(\d+)\b", as_text)
-
-        return {
-            "country": data.get("country") or "Unknown",
-            "countryCode": data.get("countryCode") or "Unknown",
-            "isp": data.get("isp") or "Unknown",
-            "asn": asn_match.group(1) if asn_match else "",
-            "asname": data.get("asname") or "",
-        }
-
-    return cached_value(key, 3600, produce)
+    return cached_value(key, 3600, produce, lambda value: value.get("countryCode") not in ("", "Unknown", "N/A") and value.get("isp") not in ("", "Unknown", "N/A"))
 
 
 def slugify(value):

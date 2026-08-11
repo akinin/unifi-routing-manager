@@ -42,6 +42,26 @@ class ValidationTests(unittest.TestCase):
             finally:
                 server.EDITABLE_FILES = original
 
+    def test_geo_fallback_and_persistent_cache(self):
+        with tempfile.TemporaryDirectory() as directory:
+            original = (server.GEO_CACHE_FILE, server.NET_CACHE, server.run)
+            try:
+                server.GEO_CACHE_FILE = Path(directory) / "geo-cache.json"
+                server.NET_CACHE = {}
+                def fallback(command, timeout=20):
+                    if "ipwho.is" in command[-1]:
+                        return {"ok": True, "code": 0, "output": json.dumps({"success": True, "country": "Russia", "country_code": "RU", "connection": {"asn": 44484, "isp": "X-Trim Ltd", "org": "X-Trim Ltd"}})}
+                    return {"ok": False, "code": 7, "output": ""}
+                server.run = fallback
+                geo = server.ip_geo("176.117.215.139")
+                self.assertEqual(geo["countryCode"], "RU")
+                self.assertEqual(geo["asn"], "44484")
+                server.NET_CACHE = {}
+                server.run = lambda *args, **kwargs: {"ok": False, "code": 7, "output": ""}
+                self.assertEqual(server.ip_geo("176.117.215.139")["isp"], "X-Trim Ltd")
+            finally:
+                server.GEO_CACHE_FILE, server.NET_CACHE, server.run = original
+
 
 class BackupTests(unittest.TestCase):
     def test_backup_and_restore_roundtrip(self):

@@ -77,7 +77,7 @@
         <section class="panel monitoring-panel" id="monitoring">
           <div class="panel-head">
             <div><h2 data-i18n="channelMonitoring">Channel monitoring</h2><p data-i18n="channelMonitoringText">Availability and latency during the latest checks.</p></div>
-            <div class="actions"><select id="monitoringRange" aria-label="History range"><option value="30" data-i18n="last30Minutes">30 min</option><option value="1440" data-i18n="last24Hours">24 hours</option><option value="10080" data-i18n="last7Days">7 days</option></select><span class="section-loader" id="monitoringLoader" hidden></span></div>
+            <div class="actions monitoring-actions"><details class="monitoring-picker"><summary data-i18n="monitoringCards">Cards</summary><div id="monitoringCardPicker"></div></details><select id="monitoringRange" aria-label="History range"><option value="30" data-i18n="last30Minutes">30 min</option><option value="1440" data-i18n="last24Hours">24 hours</option><option value="10080" data-i18n="last7Days">7 days</option></select><span class="section-loader" id="monitoringLoader" hidden></span></div>
           </div>
           <div class="monitoring-grid" id="monitoringGrid"><p class="empty" data-i18n="loading">Loading...</p></div>
         </section>
