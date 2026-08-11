@@ -201,9 +201,14 @@
           <label><span>Telegram Bot Token</span><input id="telegramBotToken" type="password" autocomplete="off" placeholder="Leave empty to keep current token" data-i18n-placeholder="keepToken"></label>
           <label><span>Telegram Chat ID</span><input id="telegramChatId" autocomplete="off" placeholder="123456789"></label>
           <label><span data-i18n="telegramTransport">Telegram transport</span><select id="telegramTransport"><option value="auto" data-i18n="transportAuto">WSS with HTTPS fallback</option><option value="wss">WSS</option><option value="direct">HTTPS</option></select></label>
-          <label><span data-i18n="telegramWssUrl">Telegram WSS relay</span><input id="telegramWssUrl" type="url" autocomplete="off" placeholder="wss://urm.olshaniki.com/telegram-ws"></label>
-          <label><span data-i18n="telegramWssSecret">WSS relay secret</span><input id="telegramWssSecret" type="password" autocomplete="off" placeholder="Leave empty to keep current secret" data-i18n-placeholder="keepRelaySecret"></label>
           <label><span>HTTPS Webhook</span><input id="notificationWebhook" type="url" autocomplete="off" placeholder="https://..."></label>
+          <details class="notification-advanced">
+            <summary data-i18n="advancedTelegram">Advanced Telegram settings</summary>
+            <div>
+              <label><span data-i18n="telegramWssUrl">Telegram WSS relay</span><input id="telegramWssUrl" type="url" autocomplete="off" placeholder="wss://urm.olshaniki.com/telegram-ws"></label>
+              <label><span data-i18n="telegramWssSecret">WSS relay secret</span><input id="telegramWssSecret" type="password" autocomplete="off" placeholder="Leave empty to keep current secret" data-i18n-placeholder="keepRelaySecret"></label>
+            </div>
+          </details>
           <div class="actions"><button class="primary" type="submit" data-i18n="save">Save</button><button id="testNotificationBtn" type="button" data-i18n="testNotification">Test notification</button></div>
         </form>
       </section>

@@ -1512,8 +1512,30 @@ body.dark .title-row .icon.brand-mark {
 }
 
 .notification-form .switch-row,
-.notification-form .actions {
+.notification-form .actions,
+.notification-advanced {
   grid-column: 1 / -1;
+}
+
+.notification-advanced {
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--panel-raised);
+}
+
+.notification-advanced summary {
+  padding: 11px 13px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.notification-advanced > div {
+  padding: 0 13px 13px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .notification-form .switch-row {
@@ -2077,12 +2099,12 @@ body.dark .title-row .icon.brand-mark {
   }
 
   main {
-    padding-top: calc(14px + env(safe-area-inset-top));
+    padding-top: calc(18px + env(safe-area-inset-top, 0px));
     padding-bottom: calc(84px + env(safe-area-inset-bottom));
   }
 
   html.standalone main {
-    padding-top: max(48px, calc(14px + env(safe-area-inset-top)));
+    padding-top: max(68px, calc(20px + env(safe-area-inset-top, 0px)));
   }
 
   .mobile-tabbar {
@@ -2140,7 +2162,7 @@ body.dark .title-row .icon.brand-mark {
   .mobile-tab[data-nav="overview"] {
     width: min(58px, calc(100% - 2px));
     height: 58px;
-    margin-top: -4px;
+    margin-top: 0;
     justify-self: center;
     padding: 7px 3px 5px;
     border: 1px solid rgba(255, 255, 255, .2);
@@ -2204,8 +2226,13 @@ body.dark .title-row .icon.brand-mark {
   }
 
   .notification-form .switch-row,
-  .notification-form .actions {
+  .notification-form .actions,
+  .notification-advanced {
     grid-column: auto;
+  }
+
+  .notification-advanced > div {
+    grid-template-columns: 1fr;
   }
 
   .sidebar-nav {
@@ -2350,5 +2377,11 @@ body.dark .title-row .icon.brand-mark {
 
   .segmented button {
     flex: 1;
+  }
+}
+
+@media (display-mode: standalone) and (max-width: 680px) {
+  main {
+    padding-top: max(68px, calc(20px + env(safe-area-inset-top, 0px)));
   }
 }
