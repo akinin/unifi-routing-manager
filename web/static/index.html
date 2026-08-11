@@ -203,6 +203,21 @@
       </div>
     </main>
 
+    <div class="mobile-more-menu" id="mobileMoreMenu" hidden>
+      <button type="button" data-nav="providers"><span data-mobile-icon="providers"></span><span data-i18n="providers">Providers</span></button>
+      <button type="button" data-nav="logs"><span data-mobile-icon="logs"></span><span data-i18n="logs">Logs</span></button>
+      <button type="button" data-nav="settings"><span data-mobile-icon="settings"></span><span data-i18n="settings">Settings</span></button>
+      <button type="button" data-mobile-profile><span data-static-icon="profile"></span><span data-i18n="profile">Profile</span></button>
+      <button class="danger" type="button" data-mobile-logout><span data-static-icon="logout"></span><span data-i18n="logout">Logout</span></button>
+    </div>
+    <nav class="mobile-tabbar" aria-label="Mobile navigation">
+      <button class="mobile-tab active" type="button" data-nav="overview"><span data-mobile-icon="overview"></span><span data-i18n="overview">Overview</span></button>
+      <button class="mobile-tab" type="button" data-nav="routing"><span data-mobile-icon="routing"></span><span data-i18n="routing">Routing</span></button>
+      <button class="mobile-tab" type="button" data-nav="dns"><span data-mobile-icon="dns"></span><span>DNS</span></button>
+      <button class="mobile-tab" type="button" data-nav="health"><span data-mobile-icon="health"></span><span data-i18n="health">Diagnostics</span></button>
+      <button class="mobile-tab mobile-more-button" type="button" data-mobile-more aria-expanded="false"><span data-static-icon="more"></span><span data-i18n="more">More</span></button>
+    </nav>
+
     <div class="toast" id="toast" hidden></div>
     <div class="modal" id="loginModal">
       <form class="modal-card" id="loginForm">
