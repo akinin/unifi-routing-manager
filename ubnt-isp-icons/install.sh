@@ -92,6 +92,19 @@ patch_unifi_paths() {
     done
     log "Cache-busted UniFi bundle: $OLD_NAME -> $NEW_NAME"
   done
+
+  for HYBRID in "$APP"/hybrid-swai-*.js; do
+    [ -f "$HYBRID" ] || continue
+    case "$HYBRID" in
+      *.urm.js) continue ;;
+    esac
+    OLD_NAME="$(basename "$HYBRID")"
+    NEW_NAME="${OLD_NAME%.js}.urm.js"
+    cp "$HYBRID" "$(dirname "$HYBRID")/$NEW_NAME"
+    chmod 644 "$(dirname "$HYBRID")/$NEW_NAME"
+    [ -f "$APP/manifest.json" ] && sed -i "s#$OLD_NAME#$NEW_NAME#g" "$APP/manifest.json"
+    log "Cache-busted UniFi loader: $OLD_NAME -> $NEW_NAME"
+  done
 }
 
 if [ "${1:-}" = "uninstall" ]; then
