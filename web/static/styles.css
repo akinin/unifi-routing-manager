@@ -1408,6 +1408,14 @@ body.dark .title-row .icon.brand-mark {
   animation: page-in .16s ease-out;
 }
 
+/* Service detail cards stay readable on wide desktop displays. */
+.page[data-page="routing"],
+.page[data-page="dns"],
+.page[data-page="providers"] {
+  width: min(100%, 1040px);
+  margin-inline: auto;
+}
+
 .service-overview {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
