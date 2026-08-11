@@ -24,6 +24,14 @@ log() {
   echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"
 }
 
+trim_log() {
+  [ -f "$LOG" ] || return 0
+  size="$(stat -c %s "$LOG" 2>/dev/null || echo 0)"
+  [ "$size" -le 10485760 ] || {
+    tail -n 5000 "$LOG" > "$LOG.trim-$$" && mv "$LOG.trim-$$" "$LOG"
+  }
+}
+
 is_ipv4() {
   echo "$1" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'
 }
@@ -39,6 +47,7 @@ ensure_files() {
   [ -f "$ADDRESSES_FILE" ] || touch "$ADDRESSES_FILE"
   [ -f "$NETWORKS_FILE" ] || touch "$NETWORKS_FILE"
   [ -f "$LOG" ] || touch "$LOG"
+  trim_log
 }
 
 list_entries() {

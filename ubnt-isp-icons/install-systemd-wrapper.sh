@@ -9,6 +9,13 @@ LOG="$BASE/systemd-install.log"
 
 mkdir -p "$BASE"
 
+if [ -f "$LOG" ]; then
+  size="$(stat -c %s "$LOG" 2>/dev/null || echo 0)"
+  if [ "$size" -gt 10485760 ]; then
+    tail -n 5000 "$LOG" > "$LOG.trim-$$" && mv "$LOG.trim-$$" "$LOG"
+  fi
+fi
+
 log() {
   echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"
 }

@@ -81,10 +81,44 @@ fi
 
 rm -rf "$STAGE_DIR" "$PREVIOUS_DIR"
 mkdir -p "$STAGE_DIR"
-if [ -d "$INSTALL_DIR" ]; then
-  cp -a "$INSTALL_DIR/." "$STAGE_DIR/"
-fi
 cp -R "$SOURCE/." "$STAGE_DIR/"
+
+# Carry only local configuration and user assets into staging. Runtime logs can
+# grow very large on UDM persistent storage, so keep just a useful recent tail.
+if [ -d "$INSTALL_DIR" ]; then
+  for relative in \
+    urm-auth.json urm.env wg-map.conf \
+    ubnt-cloud/domains.txt ubnt-cloud/networks-manual.txt \
+    ubnt-updates/update-domains.txt ubnt-updates/networks-manual.txt; do
+    if [ -f "$INSTALL_DIR/$relative" ]; then
+      mkdir -p "$(dirname "$STAGE_DIR/$relative")"
+      cp -p "$INSTALL_DIR/$relative" "$STAGE_DIR/$relative"
+    fi
+  done
+  for relative in web-data backups; do
+    if [ -d "$INSTALL_DIR/$relative" ]; then
+      rm -rf "$STAGE_DIR/$relative"
+      cp -a "$INSTALL_DIR/$relative" "$STAGE_DIR/$relative"
+    fi
+  done
+  mkdir -p "$STAGE_DIR/ubnt-isp-icons/flags"
+  for asset in "$INSTALL_DIR"/ubnt-isp-icons/*_101x101.png "$INSTALL_DIR"/ubnt-isp-icons/*.aliases "$INSTALL_DIR"/ubnt-isp-icons/*.source; do
+    [ -f "$asset" ] && cp -p "$asset" "$STAGE_DIR/ubnt-isp-icons/"
+  done
+  if [ -d "$INSTALL_DIR/ubnt-isp-icons/flags" ]; then
+    cp -a "$INSTALL_DIR/ubnt-isp-icons/flags/." "$STAGE_DIR/ubnt-isp-icons/flags/"
+  fi
+  for relative in \
+    ubnt-cloud/ubnt-cloud-routes.log \
+    ubnt-updates/ubnt-updates-routes.log \
+    ubnt-dnscrypt/ubnt-dnscrypt.log \
+    ubnt-isp-icons/systemd-install.log; do
+    if [ -f "$INSTALL_DIR/$relative" ]; then
+      mkdir -p "$(dirname "$STAGE_DIR/$relative")"
+      tail -n 5000 "$INSTALL_DIR/$relative" > "$STAGE_DIR/$relative"
+    fi
+  done
+fi
 
 rm -rf "$STAGE_DIR/.git"
 rm -f \
