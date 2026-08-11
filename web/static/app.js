@@ -13,6 +13,7 @@ const state = {
   logsLoaded: false,
   filesLoaded: false,
   connections: null,
+  maintenanceLoaded: false,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -27,6 +28,22 @@ const translations = {
     providersText: "Local ISP icons, aliases and country flags.",
     settings: "Settings",
     settingsText: "Routing lists, WireGuard mapping and account settings.",
+    health: "Diagnostics",
+    healthText: "Route health, connectivity checks and configuration backups.",
+    routeDiagnostics: "Route diagnostics",
+    routeDiagnosticsText: "Checks interfaces, policy rules, routing tables and external connectivity.",
+    runDiagnostics: "Run diagnostics",
+    diagnosticsNotRun: "Diagnostics have not been run yet.",
+    diagnosticPassed: "checks passed",
+    configurationBackups: "Configuration backups",
+    configurationBackupsText: "Automatic snapshots are created before every change and restore.",
+    createBackup: "Create backup",
+    restore: "Restore",
+    restoreConfirm: "Restore this configuration backup? A safety snapshot will be created first.",
+    noBackups: "No configuration backups yet.",
+    loading: "Loading...",
+    validationOk: "Validation passed",
+    validationFailed: "Validation failed",
     dnsText: "DNSCrypt status, forwarding rules and generated domains.",
     notUpdated: "Not updated",
     updatedNow: "Updated just now",
@@ -86,6 +103,10 @@ const translations = {
     expandLogs: "Expand logs",
     collapseLogs: "Collapse logs",
     signIn: "Sign in",
+    signInPasskey: "Face ID / Touch ID",
+    addPasskey: "Add Face ID / Touch ID",
+    passkeyAdded: "Passkey added",
+    passkeyUnavailable: "Passkeys require trusted HTTPS and a compatible browser.",
     login: "Login",
     password: "Password",
     profile: "Profile",
@@ -145,6 +166,22 @@ const translations = {
     providersText: "Локальные ISP-иконки, алиасы и флаги стран.",
     settings: "Настройки",
     settingsText: "Списки маршрутизации, карта WireGuard и учётная запись.",
+    health: "Диагностика",
+    healthText: "Состояние маршрутов, проверка соединений и резервные копии.",
+    routeDiagnostics: "Диагностика маршрутов",
+    routeDiagnosticsText: "Проверяет интерфейсы, правила, таблицы маршрутизации и внешний доступ.",
+    runDiagnostics: "Запустить диагностику",
+    diagnosticsNotRun: "Диагностика ещё не запускалась.",
+    diagnosticPassed: "проверок пройдено",
+    configurationBackups: "Резервные копии конфигурации",
+    configurationBackupsText: "Снимки автоматически создаются перед каждым изменением и восстановлением.",
+    createBackup: "Создать копию",
+    restore: "Восстановить",
+    restoreConfirm: "Восстановить эту конфигурацию? Перед откатом будет создан страховочный снимок.",
+    noBackups: "Резервных копий конфигурации пока нет.",
+    loading: "Загрузка...",
+    validationOk: "Проверка пройдена",
+    validationFailed: "Ошибка проверки",
     dnsText: "Состояние DNSCrypt, перенаправление и сгенерированные домены.",
     notUpdated: "Ещё не обновлялось",
     updatedNow: "Обновлено только что",
@@ -204,6 +241,10 @@ const translations = {
     expandLogs: "Развернуть журналы",
     collapseLogs: "Свернуть журналы",
     signIn: "Войти",
+    signInPasskey: "Face ID / Touch ID",
+    addPasskey: "Добавить Face ID / Touch ID",
+    passkeyAdded: "Ключ доступа добавлен",
+    passkeyUnavailable: "Для ключей доступа нужен доверенный HTTPS и совместимый браузер.",
     login: "Логин",
     password: "Пароль",
     profile: "Профиль",
@@ -291,6 +332,7 @@ const pageMeta = {
   routing: ["routing", "routingText"],
   dns: ["DNS", "dnsText"],
   providers: ["providers", "providersText"],
+  health: ["health", "healthText"],
   logs: ["logs", "logsText"],
   settings: ["settings", "settingsText"],
 };
@@ -311,12 +353,13 @@ function showPage(page) {
   });
   document.querySelectorAll("[data-nav]").forEach((button) => button.classList.toggle("active", button.dataset.nav === page));
   updatePageHeader();
+  if (page === "health" && !state.maintenanceLoaded) loadBackups().catch((error) => showToast(error.message));
   if (page === "logs" && !state.logsLoaded) loadLogs().catch((error) => showToast(error.message));
   if (page === "settings" && !state.filesLoaded) loadEditors().catch((error) => showToast(error.message));
 }
 
 function setupNavigationIcons() {
-  const names = { overview: "overview", routing: "route", dns: "dns", providers: "globe", logs: "terminal", settings: "settings" };
+  const names = { overview: "overview", routing: "route", dns: "dns", providers: "globe", health: "diagnostic", logs: "terminal", settings: "settings" };
   document.querySelectorAll("[data-nav-icon]").forEach((node) => { node.innerHTML = icon(names[node.dataset.navIcon]); });
   document.querySelectorAll("[data-static-icon]").forEach((node) => { node.innerHTML = icon(node.dataset.staticIcon); });
 }
@@ -333,6 +376,10 @@ const icons = {
 const mdiPaths = {
   overview: "M3,3H11V11H3V3M5,5V9H9V5H5M13,3H21V11H13V3M15,5V9H19V5H15M3,13H11V21H3V13M5,15V19H9V15H5M13,13H21V21H13V13M15,15V19H19V15H15Z",
   settings: "M12,15.5A3.5,3.5 0 1,1 12,8.5A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.42,11L21.54,9.37L19.54,5.9L17.05,6.9C16.54,6.5 16,6.18 15.37,5.94L15,3.29H11L10.62,5.94C10,6.18 9.45,6.5 8.95,6.9L6.46,5.9L4.46,9.37L6.57,11C6.53,11.34 6.5,11.67 6.5,12C6.5,12.33 6.53,12.65 6.58,12.97L4.46,14.63L6.46,18.1L8.95,17.09C9.46,17.5 10,17.82 10.63,18.06L11,20.71H15L15.38,18.06C16,17.81 16.55,17.5 17.05,17.09L19.54,18.1L21.54,14.63L19.43,12.97Z",
+  diagnostic: "M3,13H5.2L7.1,9.2L10.6,17L13.2,12H21V14H14.4L10.5,21L7,13.8L6.4,15H3V13M3,5H21V7H3V5Z",
+  backup: "M21,11V3H3V9H5V5H19V11H16L20,15L24,11H21M3,13V21H21V17H19V19H5V13H3M12,8A5,5 0 0,0 7,13H9A3,3 0 0,1 12,10A3,3 0 0,1 15,13H17A5,5 0 0,0 12,8Z",
+  restore: "M13,3C8.03,3 4,7.03 4,12H1L5,16L9,12H6C6,8.69 8.69,6 12,6C15.31,6 18,8.69 18,12C18,15.31 15.31,18 12,18C10.35,18 8.85,17.33 7.76,16.24L6.34,17.66C7.79,19.1 9.79,20 12,20C16.42,20 20,16.42 20,12C20,7.03 16.42,3 12,3H13Z",
+  fingerprint: "M17.81,4.47C16.27,3 14.22,2 12,2C9.79,2 7.78,2.89 6.31,4.34L7.72,5.76C8.82,4.67 10.34,4 12,4C13.66,4 15.18,4.67 16.28,5.76L17.81,4.47M20.84,7.31C19.03,4.14 15.68,2 12,2V4C14.94,4 17.6,5.71 18.91,8.37L20.84,7.31M3.16,7.31L5.09,8.37C6.4,5.71 9.06,4 12,4V2C8.32,2 4.97,4.14 3.16,7.31M12,6C8.69,6 6,8.69 6,12C6,13.1 6.9,14 8,14C9.1,14 10,13.1 10,12C10,10.9 10.9,10 12,10C13.1,10 14,10.9 14,12C14,15.31 12.66,18.31 10.5,20.47L11.91,21.88C14.44,19.35 16,15.85 16,12C16,9.79 14.21,8 12,8C9.79,8 8,9.79 8,12H6C6,8.69 8.69,6 12,6M18,12C18,16.42 16.21,20.42 13.31,23.31L14.72,24.72C17.99,21.45 20,16.95 20,12C20,7.58 16.42,4 12,4V6C15.31,6 18,8.69 18,12Z",
   more: "M12,8A2,2 0 1,0 12,4A2,2 0 0,0 12,8M12,10A2,2 0 1,0 12,14A2,2 0 0,0 12,10M12,16A2,2 0 1,0 12,20A2,2 0 0,0 12,16Z",
   cloud: "M6.5 20Q4.22 20 2.61 18.43 1 16.85 1 14.58 1 12.63 2.17 11.1 3.35 9.57 5.25 9.15 5.88 6.85 7.75 5.43 9.63 4 12 4 14.93 4 16.96 6.04 19 8.07 19 11 20.73 11.2 21.86 12.5 23 13.78 23 15.5 23 17.38 21.69 18.69 20.38 20 18.5 20M6.5 18H18.5Q19.55 18 20.27 17.27 21 16.55 21 15.5 21 14.45 20.27 13.73 19.55 13 18.5 13H17V11Q17 8.93 15.54 7.46 14.08 6 12 6 9.93 6 8.46 7.46 7 8.93 7 11H6.5Q5.05 11 4.03 12.03 3 13.05 3 14.5 3 15.95 4.03 17 5.05 18 6.5 18M12 12Z",
   update: "M21,10.12H14.22L16.96,7.3C14.23,4.6 9.81,4.5 7.08,7.2C4.35,9.91 4.35,14.28 7.08,17C9.81,19.7 14.23,19.7 16.96,17C18.32,15.65 19,14.08 19,12.1H21C21,14.08 20.12,16.65 18.36,18.39C14.85,21.87 9.15,21.87 5.64,18.39C2.14,14.92 2.11,9.28 5.62,5.81C9.13,2.34 14.76,2.34 18.27,5.81L21,3V10.12M12.5,8V12.25L16,14.33L15.28,15.54L11,13V8H12.5Z",
@@ -693,7 +740,12 @@ async function checkAuth() {
   state.me = me;
   const modal = $("#loginModal");
   modal.hidden = Boolean(me.authenticated);
+  document.body.classList.remove("auth-pending");
+  document.body.classList.toggle("auth-locked", !me.authenticated);
   applyBranding(me.logo);
+  const passkeysAvailable = window.isSecureContext && Boolean(window.PublicKeyCredential);
+  $("#passkeyLoginBtn").hidden = !passkeysAvailable || !me.passkeys;
+  $("#registerPasskeyBtn").hidden = !passkeysAvailable || !me.authenticated;
   if (me.authenticated) renderUserIdentity(me);
   return me.authenticated;
 }
@@ -763,6 +815,77 @@ async function loadLogs() {
   const data = await getJson(`/api/logs?target=${encodeURIComponent(target)}&lines=160`);
   $("#logBox").textContent = data.log || t("noLogEntries");
   state.logsLoaded = true;
+}
+
+function formatBytes(value) {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function renderBackups(data) {
+  const items = data.backups || [];
+  $("#backupList").innerHTML = items.length ? items.map((item) => `
+    <article class="backup-item">
+      <div><strong>${escapeHtml(new Date(item.createdAt * 1000).toLocaleString(state.lang))}</strong><small>${escapeHtml(item.reason)} · ${formatBytes(item.size)}</small></div>
+      <button type="button" data-restore-backup="${escapeHtml(item.id)}">${icon("restore")}<span>${t("restore")}</span></button>
+    </article>
+  `).join("") : `<p class="empty">${t("noBackups")}</p>`;
+}
+
+async function loadBackups() {
+  const data = await getJson("/api/backups", { cache: "no-store" });
+  renderBackups(data);
+  state.maintenanceLoaded = true;
+}
+
+async function createBackup() {
+  const result = await getJson("/api/backups/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  showToast(result.ok ? t("done") : t("failed"));
+  await loadBackups();
+}
+
+async function restoreBackup(id) {
+  if (!window.confirm(t("restoreConfirm"))) return;
+  const result = await getJson("/api/backups/restore", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+  showToast(result.output || (result.ok ? t("done") : t("failed")));
+  state.filesLoaded = false;
+  await Promise.all([loadBackups(), refresh()]);
+}
+
+function renderDiagnostics(data) {
+  $("#diagnosticSummary").innerHTML = `
+    <div class="diagnostic-score ${data.ok ? "ok" : "bad"}"><strong>${data.passed}/${data.total}</strong><span>${t("diagnosticPassed")}</span></div>
+    <div class="diagnostic-duration"><strong>${data.durationMs} ms</strong><span>${escapeHtml(new Date(data.generatedAt * 1000).toLocaleTimeString(state.lang))}</span></div>`;
+  $("#diagnosticResults").innerHTML = (data.sections || []).map((section) => `
+    <article class="diagnostic-section">
+      <div class="list-head"><h3>${escapeHtml(section.title)}</h3>${badge(section.ok ? "active" : "error")}</div>
+      <div class="diagnostic-checks">${section.checks.map((check) => `
+        <div class="diagnostic-check ${check.ok ? "ok" : "bad"}"><span class="status-dot ${check.ok ? "ok" : "bad"}"></span><strong>${escapeHtml(check.label)}</strong><code title="${escapeHtml(check.detail)}">${escapeHtml(check.detail || "—")}</code></div>`).join("")}</div>
+    </article>`).join("");
+}
+
+async function runDiagnostics() {
+  const button = $("#runDiagnosticsBtn");
+  button.disabled = true;
+  try {
+    const data = await getJson("/api/diagnostics", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    renderDiagnostics(data);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function showToast(message) {
@@ -889,6 +1012,20 @@ async function runAction(action) {
 async function saveEditor(key) {
   const editor = key === state.editorKey ? $("#modalEditor") : document.querySelector(`[data-editor="${key}"]`);
   if (!editor) return;
+  const validationTarget = document.querySelector(`[data-validation="${key}"]`);
+  const validation = await getJson("/api/files/validate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key, content: editor.value }),
+  });
+  if (validationTarget) {
+    validationTarget.className = `editor-validation ${validation.ok ? "ok" : "bad"}`;
+    validationTarget.textContent = validation.ok
+      ? `${t("validationOk")}: ${validation.entries}`
+      : `${t("validationFailed")}: ${(validation.errors || []).join("; ")}`;
+  }
+  if (!validation.ok) return;
+  if (validation.warnings?.length && !window.confirm(validation.warnings.join("\n"))) return;
   const result = await getJson("/api/files", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -907,7 +1044,69 @@ async function login(username, password) {
   });
   if (result.ok) {
     $("#loginModal").hidden = true;
+    document.body.classList.remove("auth-locked", "auth-pending");
     await refresh();
+  }
+}
+
+function decodeBase64Url(value) {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+  return Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
+}
+
+function encodeBase64Url(value) {
+  const bytes = new Uint8Array(value);
+  let binary = "";
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function preparePublicKey(options) {
+  const result = { ...options, challenge: decodeBase64Url(options.challenge) };
+  if (options.user) result.user = { ...options.user, id: decodeBase64Url(options.user.id) };
+  if (options.allowCredentials) result.allowCredentials = options.allowCredentials.map((item) => ({ ...item, id: decodeBase64Url(item.id) }));
+  if (options.excludeCredentials) result.excludeCredentials = options.excludeCredentials.map((item) => ({ ...item, id: decodeBase64Url(item.id) }));
+  return result;
+}
+
+function serializeCredential(credential) {
+  const response = {};
+  for (const key of ["clientDataJSON", "attestationObject", "authenticatorData", "signature", "userHandle"]) {
+    if (credential.response[key]) response[key] = encodeBase64Url(credential.response[key]);
+  }
+  return { id: credential.id, rawId: encodeBase64Url(credential.rawId), type: credential.type, response };
+}
+
+async function loginWithPasskey() {
+  if (!window.isSecureContext || !window.PublicKeyCredential) throw new Error(t("passkeyUnavailable"));
+  const options = await getJson("/api/auth/passkey/options", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  const credential = await navigator.credentials.get({ publicKey: preparePublicKey(options.publicKey) });
+  const result = await getJson("/api/auth/passkey/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: options.token, credential: serializeCredential(credential) }),
+  });
+  if (result.ok) {
+    $("#loginModal").hidden = true;
+    document.body.classList.remove("auth-locked", "auth-pending");
+    await checkAuth();
+    await refresh();
+  }
+}
+
+async function registerPasskey() {
+  if (!window.isSecureContext || !window.PublicKeyCredential) throw new Error(t("passkeyUnavailable"));
+  const options = await getJson("/api/auth/passkey/register/options", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  const credential = await navigator.credentials.create({ publicKey: preparePublicKey(options.publicKey) });
+  const result = await getJson("/api/auth/passkey/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: options.token, name: navigator.platform || "Passkey", credential: serializeCredential(credential) }),
+  });
+  showToast(result.ok ? t("passkeyAdded") : result.output || t("failed"));
+  if (result.ok) {
+    state.me.passkeys = result.count;
+    $("#passkeyLoginBtn").hidden = false;
   }
 }
 
@@ -1034,15 +1233,21 @@ document.addEventListener("click", async (event) => {
   }
   const download = event.target.closest("[data-open-download]");
   if (download) openDownload(download.dataset.openDownload);
+  const restore = event.target.closest("[data-restore-backup]");
+  if (restore) restoreBackup(restore.dataset.restoreBackup).catch((error) => showToast(error.message));
   if (event.target.closest("[data-close-modal]")) event.target.closest(".modal").hidden = true;
 });
 
 $("#refreshBtn").addEventListener("click", () => refresh().catch((error) => showToast(error.message)));
+$("#runDiagnosticsBtn").addEventListener("click", () => runDiagnostics().catch((error) => showToast(error.message)));
+$("#createBackupBtn").addEventListener("click", () => createBackup().catch((error) => showToast(error.message)));
 $("#logTarget").addEventListener("change", () => loadLogs().catch((error) => showToast(error.message)));
 $("#loginForm").addEventListener("submit", (event) => {
   event.preventDefault();
   login($("#loginUser").value, $("#loginPass").value).catch((error) => showToast(error.message));
 });
+$("#passkeyLoginBtn").addEventListener("click", () => loginWithPasskey().catch((error) => showToast(error.message)));
+$("#registerPasskeyBtn").addEventListener("click", () => registerPasskey().catch((error) => showToast(error.message)));
 $("#saveModalEditor").addEventListener("click", () => saveEditor(state.editorKey));
 $("#downloadBtn").addEventListener("click", downloadAsset);
 $("#avatarBtn").addEventListener("click", () => {

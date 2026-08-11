@@ -24,7 +24,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/akinin/unifi-routing-man
 
 Проект устанавливается в `/persistent/unifi-routing-manager`. Существующая установка в `/persistent/unifi-route-manager` переносится автоматически с сохранением настроек, логов, списков, иконок и авторизации.
 
-После установки откройте `http://<udm-ip>:8090`.
+После установки backend доступен на `http://<udm-ip>:8090`. Для обычной работы рекомендуется HTTPS reverse proxy. В текущей установке используется `https://urm.olshaniki.com` через Nginx Proxy Manager; прямые HTTP-запросы перенаправляются туда через `UNIFI_PUBLIC_URL` в `urm.env`.
 
 ## Обновление
 
@@ -46,6 +46,25 @@ urm-update
 - просмотр журналов и управление systemd-службами;
 - добавление и установка локальных ISP-иконок;
 - ручное и Web-обновление проекта.
+- диагностика интерфейсов, policy rules, таблиц и внешнего IP;
+- проверка конфигурации перед записью и атомарное сохранение;
+- резервные копии конфигурации с восстановлением из Web UI;
+- Passkey/WebAuthn для Touch ID и Face ID при работе через доверенный HTTPS;
+- staging-обновление с health-check и автоматическим rollback.
+
+## HTTPS и Passkey
+
+Backend можно оставить на LAN-порту `8090`, а TLS завершать на Nginx Proxy Manager. Пример локального файла `/persistent/unifi-routing-manager/urm.env`:
+
+```text
+UNIFI_PUBLIC_URL=https://urm.example.com
+```
+
+Reverse proxy должен передавать исходный `Host` и `X-Forwarded-Proto: https`. После входа по паролю откройте профиль и нажмите **Добавить Face ID / Touch ID**. WebAuthn недоступен по обычному HTTP и с недоверенным сертификатом.
+
+## Резервные копии и обновления
+
+Web UI сохраняет до 20 конфигурационных снимков в `backups/`. Снимок автоматически создаётся перед изменением или восстановлением конфигурации. Обновлятор сначала проверяет новую версию в staging-каталоге, создаёт полный архив в `/persistent/urm-backups`, атомарно переключает установку и откатывается, если Web UI не проходит health-check.
 
 ## Файлы и локальные данные
 

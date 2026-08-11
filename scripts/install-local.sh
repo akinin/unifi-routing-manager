@@ -165,7 +165,6 @@ ensure_runtime_files() {
     "$PROJECT_ROOT/ubnt-dnscrypt" \
     "$PROJECT_ROOT/ubnt-isp-icons" \
     "$PROJECT_ROOT/web-data"
-
   touch \
     "$PROJECT_ROOT/ubnt-cloud/addresses.txt" \
     "$PROJECT_ROOT/ubnt-cloud/networks.txt" \

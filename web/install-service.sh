@@ -36,6 +36,7 @@ WorkingDirectory=$PROJECT_ROOT
 Environment=UNIFI_ROUTING_ROOT=$PROJECT_ROOT
 Environment=UNIFI_WEB_HOST=$WEB_HOST
 Environment=UNIFI_WEB_PORT=$WEB_PORT
+EnvironmentFile=-$PROJECT_ROOT/urm.env
 ExecStart=$PYTHON_BIN $PROJECT_ROOT/web/server.py
 Restart=on-failure
 RestartSec=5
@@ -50,4 +51,4 @@ systemctl enable "$SERVICE"
 systemctl restart "$SERVICE"
 
 echo "Installed and started $SERVICE"
-echo "Open http://<device-lan-ip>:$WEB_PORT"
+echo "Open http://<device-lan-ip>:$WEB_PORT or place it behind a trusted HTTPS reverse proxy"

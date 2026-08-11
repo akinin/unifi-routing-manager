@@ -12,6 +12,10 @@ import hashlib
 import hmac
 import secrets
 import base64
+import binascii
+import ipaddress
+import tarfile
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -23,6 +27,7 @@ PROJECT_HOME = APP_DIR.parent
 ROOT = Path(os.environ.get("UNIFI_ROUTING_ROOT", "/persistent/unifi-routing-manager")).resolve()
 HOST = os.environ.get("UNIFI_WEB_HOST", "0.0.0.0")
 PORT = int(os.environ.get("UNIFI_WEB_PORT", "8090"))
+PUBLIC_URL = os.environ.get("UNIFI_PUBLIC_URL", "").rstrip("/")
 
 PROJECTS = {
     "cloud": {
@@ -72,9 +77,15 @@ ISP_ICONS = {
 WEB_SERVICE = "unifi-routing-web.service"
 NET_CACHE = {}
 NET_CACHE_LOCK = threading.Lock()
-AUTH_FILE = PROJECT_HOME / "urm-auth.json"
-AVATAR_DIR = PROJECT_HOME / "web-data"
+AUTH_FILE = ROOT / "urm-auth.json"
+AVATAR_DIR = ROOT / "web-data"
 SESSION_TTL = 86400
+BACKUP_DIR = ROOT / "backups"
+BACKUP_LIMIT = 20
+WEBAUTHN_CHALLENGES = {}
+WEBAUTHN_LOCK = threading.Lock()
+LOGIN_ATTEMPTS = {}
+LOGIN_ATTEMPTS_LOCK = threading.Lock()
 EDITABLE_FILES = {
     "cloud.domains": ROOT / "ubnt-cloud" / "domains.txt",
     "cloud.networks": ROOT / "ubnt-cloud" / "networks-manual.txt",
@@ -88,6 +99,8 @@ VIEW_ONLY_FILES = {
         "description": "Generated from the Cloud and Updates domain lists. Edit those source lists to change DNSCrypt forwarding.",
     },
 }
+
+CONFIG_BACKUP_PATHS = tuple(dict.fromkeys(EDITABLE_FILES.values()))
 
 
 def read_text(path, default=""):
@@ -107,6 +120,151 @@ def read_json(path, default=None):
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return default if default is not None else {}
+
+
+def atomic_write_text(path, content, mode=0o600):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_name(f".{path.name}.tmp-{os.getpid()}-{secrets.token_hex(3)}")
+    try:
+        temp.write_text(content, encoding="utf-8")
+        os.chmod(temp, mode)
+        os.replace(temp, path)
+    finally:
+        try:
+            temp.unlink()
+        except OSError:
+            pass
+
+
+def editable_lines(content):
+    return [line.strip() for line in content.replace("\r\n", "\n").replace("\r", "\n").splitlines() if line.strip() and not line.lstrip().startswith("#")]
+
+
+def validate_editable_content(key, content):
+    if key not in EDITABLE_FILES:
+        return {"ok": False, "errors": ["Unknown editable file"], "warnings": [], "entries": 0}
+    if not isinstance(content, str) or "\x00" in content or len(content.encode("utf-8")) > 1024 * 1024:
+        return {"ok": False, "errors": ["Invalid or oversized content"], "warnings": [], "entries": 0}
+
+    lines = editable_lines(content)
+    errors = []
+    warnings = []
+    seen = set()
+    for number, value in enumerate(lines, 1):
+        if value in seen:
+            warnings.append(f"Duplicate entry: {value}")
+        seen.add(value)
+        if key.endswith(".domains"):
+            domain = value[2:] if value.startswith("*.") else value
+            if len(domain) > 253 or not re.match(r"^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$", domain):
+                errors.append(f"Line {number}: invalid domain '{value}'")
+        elif key.endswith(".networks"):
+            try:
+                network = ipaddress.ip_network(value, strict=False)
+                if network.version != 4:
+                    errors.append(f"Line {number}: only IPv4 networks are supported")
+            except ValueError:
+                errors.append(f"Line {number}: invalid network '{value}'")
+
+    if key == "wg.map":
+        tables = set()
+        interfaces = set()
+        for number, value in enumerate(lines, 1):
+            parts = value.split(None, 2)
+            if len(parts) != 3:
+                errors.append(f"Line {number}: expected <table> <interface> <name>")
+                continue
+            table, iface, name = parts
+            if not re.match(r"^[A-Za-z0-9_.-]+$", table):
+                errors.append(f"Line {number}: invalid table '{table}'")
+            if not re.match(r"^[A-Za-z0-9_.:-]+$", iface):
+                errors.append(f"Line {number}: invalid interface '{iface}'")
+            if not name.strip():
+                errors.append(f"Line {number}: route name is empty")
+            if table in tables:
+                errors.append(f"Line {number}: duplicate table '{table}'")
+            if iface in interfaces:
+                errors.append(f"Line {number}: duplicate interface '{iface}'")
+            tables.add(table)
+            interfaces.add(iface)
+            if not Path("/sys/class/net", iface).exists():
+                warnings.append(f"Interface {iface} is not currently present")
+
+    if not lines:
+        errors.append("At least one entry is required")
+    return {"ok": not errors, "errors": errors, "warnings": list(dict.fromkeys(warnings)), "entries": len(lines)}
+
+
+def backup_item(path):
+    metadata = read_json(path.with_suffix(".json"), {})
+    stat = path.stat()
+    return {
+        "id": path.name,
+        "createdAt": metadata.get("createdAt", int(stat.st_mtime)),
+        "reason": metadata.get("reason", "manual"),
+        "size": stat.st_size,
+    }
+
+
+def list_config_backups():
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    items = []
+    for path in BACKUP_DIR.glob("config-*.tar.gz"):
+        try:
+            items.append(backup_item(path))
+        except OSError:
+            continue
+    return sorted(items, key=lambda item: item["createdAt"], reverse=True)
+
+
+def create_config_backup(reason="manual"):
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    path = BACKUP_DIR / f"config-{stamp}-{secrets.token_hex(2)}.tar.gz"
+    with tarfile.open(path, "w:gz") as archive:
+        for source in CONFIG_BACKUP_PATHS:
+            if source.exists():
+                archive.add(source, arcname=str(source.relative_to(ROOT)), recursive=False)
+    metadata = {"createdAt": int(time.time()), "reason": str(reason)[:160] or "manual"}
+    write_json(path.with_suffix(".json"), metadata)
+    backups = list_config_backups()
+    for old in backups[BACKUP_LIMIT:]:
+        old_path = BACKUP_DIR / old["id"]
+        for candidate in (old_path, old_path.with_suffix(".json")):
+            try:
+                candidate.unlink()
+            except OSError:
+                pass
+    return backup_item(path)
+
+
+def restore_config_backup(backup_id):
+    if not re.match(r"^config-[0-9]{8}-[0-9]{6}-[a-f0-9]{4}\.tar\.gz$", backup_id or ""):
+        return {"ok": False, "output": "Invalid backup identifier"}
+    path = BACKUP_DIR / backup_id
+    if not path.exists():
+        return {"ok": False, "output": "Backup not found"}
+    allowed = {str(item.relative_to(ROOT)): item for item in CONFIG_BACKUP_PATHS}
+    create_config_backup(f"before restore {backup_id}")
+    restored = []
+    try:
+        with tarfile.open(path, "r:gz") as archive:
+            for member in archive.getmembers():
+                target = allowed.get(member.name)
+                if not target or not member.isfile():
+                    raise ValueError(f"Unexpected backup entry: {member.name}")
+                source = archive.extractfile(member)
+                if source is None:
+                    raise ValueError(f"Cannot read backup entry: {member.name}")
+                atomic_write_text(target, source.read().decode("utf-8"), 0o600)
+                restored.append(member.name)
+    except (OSError, tarfile.TarError, UnicodeDecodeError, ValueError) as error:
+        return {"ok": False, "output": f"Restore failed: {error}"}
+    results = []
+    for service in ("ubnt-cloud-routes.service", "ubnt-updates-routes.service", "ubnt-dnscrypt.service"):
+        results.append(systemctl("start", service))
+    ok = all(result["ok"] for result in results)
+    return {"ok": ok, "output": f"Restored {len(restored)} files" + ("" if ok else "; one or more services failed to restart")}
 
 
 def hash_password(password, salt=None, iterations=210000):
@@ -191,11 +349,176 @@ def verify_session(cookie):
         username, expires, signature = decoded.rsplit(":", 2)
     except (ValueError, UnicodeDecodeError):
         return False
-    if username != config.get("username") or int(expires) < int(time.time()):
+    try:
+        expired = int(expires) < int(time.time())
+    except ValueError:
+        return False
+    if username != config.get("username") or expired:
         return False
     payload = f"{username}:{expires}"
     expected = hmac.new(config["sessionSecret"].encode("ascii"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
     return hmac.compare_digest(signature, expected)
+
+
+def login_allowed(address):
+    now = time.time()
+    with LOGIN_ATTEMPTS_LOCK:
+        recent = [stamp for stamp in LOGIN_ATTEMPTS.get(address, []) if now - stamp < 300]
+        LOGIN_ATTEMPTS[address] = recent
+        return len(recent) < 5
+
+
+def record_login_failure(address):
+    with LOGIN_ATTEMPTS_LOCK:
+        LOGIN_ATTEMPTS.setdefault(address, []).append(time.time())
+
+
+def clear_login_failures(address):
+    with LOGIN_ATTEMPTS_LOCK:
+        LOGIN_ATTEMPTS.pop(address, None)
+
+
+def b64url_encode(value):
+    return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
+
+def b64url_decode(value):
+    raw = str(value or "").encode("ascii")
+    return base64.urlsafe_b64decode(raw + b"=" * (-len(raw) % 4))
+
+
+def new_webauthn_challenge(kind, rp_id, origin, username=""):
+    token = secrets.token_urlsafe(24)
+    challenge = secrets.token_bytes(32)
+    with WEBAUTHN_LOCK:
+        now = time.time()
+        for key, item in list(WEBAUTHN_CHALLENGES.items()):
+            if item["expires"] < now:
+                WEBAUTHN_CHALLENGES.pop(key, None)
+        WEBAUTHN_CHALLENGES[token] = {
+            "kind": kind,
+            "challenge": challenge,
+            "rpId": rp_id,
+            "origin": origin,
+            "username": username,
+            "expires": now + 180,
+        }
+    return token, challenge
+
+
+def take_webauthn_challenge(token, kind):
+    with WEBAUTHN_LOCK:
+        item = WEBAUTHN_CHALLENGES.pop(str(token or ""), None)
+    if not item or item["kind"] != kind or item["expires"] < time.time():
+        raise ValueError("Passkey challenge expired or invalid")
+    return item
+
+
+def cbor_decode(data, offset=0):
+    if offset >= len(data):
+        raise ValueError("Unexpected end of CBOR data")
+    initial = data[offset]
+    offset += 1
+    major = initial >> 5
+    additional = initial & 31
+    if additional < 24:
+        length = additional
+    elif additional == 24:
+        length, offset = data[offset], offset + 1
+    elif additional == 25:
+        length, offset = struct.unpack(">H", data[offset:offset + 2])[0], offset + 2
+    elif additional == 26:
+        length, offset = struct.unpack(">I", data[offset:offset + 4])[0], offset + 4
+    elif additional == 27:
+        length, offset = struct.unpack(">Q", data[offset:offset + 8])[0], offset + 8
+    else:
+        raise ValueError("Unsupported CBOR length")
+    if major == 0:
+        return length, offset
+    if major == 1:
+        return -1 - length, offset
+    if major in (2, 3):
+        end = offset + length
+        if end > len(data):
+            raise ValueError("Truncated CBOR value")
+        value = data[offset:end]
+        return (value if major == 2 else value.decode("utf-8")), end
+    if major == 4:
+        result = []
+        for _ in range(length):
+            value, offset = cbor_decode(data, offset)
+            result.append(value)
+        return result, offset
+    if major == 5:
+        result = {}
+        for _ in range(length):
+            key, offset = cbor_decode(data, offset)
+            value, offset = cbor_decode(data, offset)
+            result[key] = value
+        return result, offset
+    if major == 7 and additional in (20, 21, 22):
+        return ({20: False, 21: True, 22: None}[additional]), offset
+    raise ValueError("Unsupported CBOR type")
+
+
+def public_key_pem_from_cose(cose):
+    if cose.get(1) != 2 or cose.get(3) != -7 or cose.get(-1) != 1:
+        raise ValueError("Only ES256 passkeys are supported")
+    x = cose.get(-2, b"")
+    y = cose.get(-3, b"")
+    if len(x) != 32 or len(y) != 32:
+        raise ValueError("Invalid passkey public key")
+    # SubjectPublicKeyInfo for id-ecPublicKey / prime256v1 and an uncompressed EC point.
+    der = bytes.fromhex("3059301306072a8648ce3d020106082a8648ce3d03010703420004") + x + y
+    encoded = base64.b64encode(der).decode("ascii")
+    return "-----BEGIN PUBLIC KEY-----\n" + "\n".join(encoded[index:index + 64] for index in range(0, len(encoded), 64)) + "\n-----END PUBLIC KEY-----\n"
+
+
+def verify_client_data(encoded, challenge, expected_type, origin):
+    raw = b64url_decode(encoded)
+    data = json.loads(raw.decode("utf-8"))
+    if data.get("type") != expected_type or not hmac.compare_digest(data.get("challenge", ""), b64url_encode(challenge)):
+        raise ValueError("Invalid Passkey client data")
+    if data.get("origin") != origin:
+        raise ValueError("Passkey origin mismatch")
+    return raw
+
+
+def parse_registration_auth_data(attestation_object, rp_id):
+    attestation, _ = cbor_decode(attestation_object)
+    auth_data = attestation.get("authData", b"") if isinstance(attestation, dict) else b""
+    if len(auth_data) < 55 or not (auth_data[32] & 0x40):
+        raise ValueError("Passkey attestation is missing credential data")
+    if not hmac.compare_digest(auth_data[:32], hashlib.sha256(rp_id.encode("utf-8")).digest()):
+        raise ValueError("Passkey RP ID mismatch")
+    credential_length = struct.unpack(">H", auth_data[53:55])[0]
+    end = 55 + credential_length
+    credential_id = auth_data[55:end]
+    cose, _ = cbor_decode(auth_data, end)
+    return credential_id, public_key_pem_from_cose(cose), struct.unpack(">I", auth_data[33:37])[0]
+
+
+def verify_passkey_assertion(passkey, response, challenge):
+    client_data = verify_client_data(response.get("clientDataJSON", ""), challenge["challenge"], "webauthn.get", challenge["origin"])
+    auth_data = b64url_decode(response.get("authenticatorData", ""))
+    signature = b64url_decode(response.get("signature", ""))
+    if len(auth_data) < 37 or not (auth_data[32] & 0x01):
+        raise ValueError("Passkey user presence was not verified")
+    expected_rp = hashlib.sha256(challenge["rpId"].encode("utf-8")).digest()
+    if not hmac.compare_digest(auth_data[:32], expected_rp):
+        raise ValueError("Passkey RP ID mismatch")
+    signed = auth_data + hashlib.sha256(client_data).digest()
+    with tempfile.TemporaryDirectory(prefix="urm-passkey-") as directory:
+        key_path = Path(directory) / "key.pem"
+        data_path = Path(directory) / "data.bin"
+        signature_path = Path(directory) / "signature.bin"
+        key_path.write_text(passkey["publicKeyPem"], encoding="ascii")
+        data_path.write_bytes(signed)
+        signature_path.write_bytes(signature)
+        result = run(["openssl", "dgst", "-sha256", "-verify", str(key_path), "-signature", str(signature_path), str(data_path)], timeout=8)
+    if not result["ok"]:
+        raise ValueError("Passkey signature verification failed")
+    return struct.unpack(">I", auth_data[33:37])[0]
 
 
 def avatar_url(config=None):
@@ -744,8 +1067,10 @@ def iface_friendly_name(iface):
 
 
 def route_to(target):
-    result = run(["sh", "-lc", f"ip route get {target} 2>/dev/null | head -1"], timeout=6)
-    line = result["output"] if result["ok"] else ""
+    if not re.match(r"^[0-9A-Fa-f:.]+$", target or ""):
+        return {"target": target, "iface": "", "name": "", "raw": "invalid target"}
+    result = run(["ip", "route", "get", target], timeout=6)
+    line = result["output"].splitlines()[0] if result["ok"] and result["output"] else ""
     iface = ""
     match = re.search(r"\bdev\s+(\S+)", line)
     if match:
@@ -853,20 +1178,20 @@ def save_editable_file(key, content):
     path = EDITABLE_FILES.get(key)
     if not path:
         return {"ok": False, "output": "Unknown editable file"}
-    if "\x00" in content:
-        return {"ok": False, "output": "Invalid content"}
+    validation = validate_editable_content(key, content)
+    if not validation["ok"]:
+        return {"ok": False, "output": "Validation failed", "validation": validation}
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        backup = path.with_name(f"{path.name}.bak-web-{time.strftime('%Y%m%d-%H%M%S')}")
-        backup.write_text(path.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
-    path.write_text(content.replace("\r\n", "\n").replace("\r", "\n").rstrip() + "\n", encoding="utf-8")
+    backup = create_config_backup(f"before editing {key}")
+    normalized = content.replace("\r\n", "\n").replace("\r", "\n").rstrip() + "\n"
+    atomic_write_text(path, normalized, 0o600)
 
     if key == "cloud.networks":
         update_result = run(["sh", str(ROOT / "ubnt-cloud" / "update-aws-networks.sh")], timeout=120)
-        return {"ok": update_result["ok"], "output": f"Saved {path}\n{update_result['output']}".strip()}
+        return {"ok": update_result["ok"], "output": f"Saved {path}\n{update_result['output']}".strip(), "backup": backup, "validation": validation}
 
-    return {"ok": True, "output": f"Saved {path}"}
+    return {"ok": True, "output": f"Saved {path}", "backup": backup, "validation": validation}
 
 
 def download_asset(kind, url, filename):
@@ -886,6 +1211,75 @@ def download_asset(kind, url, filename):
         marker = path.with_suffix(path.suffix + ".source")
         marker.write_text("manual\n", encoding="utf-8")
     return {"ok": ok, "output": output}
+
+
+def diagnostic_check(key, label, ok, detail=""):
+    return {"key": key, "label": label, "ok": bool(ok), "detail": str(detail or "")}
+
+
+def diagnostic_target(config):
+    addresses = list_entries(config["dir"] / config["files"]["addresses"])
+    for value in addresses:
+        try:
+            return str(ipaddress.ip_address(value))
+        except ValueError:
+            continue
+    networks = list_entries(config["dir"] / config["files"]["networks"])
+    for value in networks:
+        try:
+            network = ipaddress.ip_network(value, strict=False)
+            if network.version == 4:
+                return str(network.network_address + (1 if network.num_addresses > 1 else 0))
+        except ValueError:
+            continue
+    return "1.1.1.1"
+
+
+def diagnose_project(key, config):
+    status = project_status(key, config)
+    iface = status["activeIface"]
+    table = status["activeTable"]
+    target = diagnostic_target(config)
+    checks = [
+        diagnostic_check("configured", "Configuration", status["configured"], status["activeName"]),
+        diagnostic_check("timer", "Timer", status["timer"] == "active", status["timer"]),
+    ]
+    iface_ok = bool(iface and iface not in ("unknown", "not configured") and Path("/sys/class/net", iface).exists())
+    checks.append(diagnostic_check("interface", "Interface", iface_ok, iface))
+    table_result = run(["ip", "route", "show", "table", table], timeout=6) if table not in ("", "unknown") else {"ok": False, "output": ""}
+    checks.append(diagnostic_check("table", "Routing table", table_result["ok"] and bool(table_result["output"]), table))
+    rule_count = status["rules"]
+    checks.append(diagnostic_check("rules", "Policy rules", str(rule_count).isdigit() and int(rule_count) > 0, rule_count))
+    route = route_to(target)
+    checks.append(diagnostic_check("route", "Route test", bool(route["iface"]) and route["iface"] == iface, route["raw"] or target))
+    public_ip = external_ip(iface) if iface_ok else "N/A"
+    checks.append(diagnostic_check("internet", "External IP", public_ip != "N/A", public_ip))
+    return {"key": key, "title": config["title"], "checks": checks, "ok": all(check["ok"] for check in checks)}
+
+
+def diagnostics_payload():
+    started = time.monotonic()
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        project_futures = [executor.submit(diagnose_project, key, config) for key, config in PROJECTS.items()]
+        projects = [future.result() for future in project_futures]
+    dns = dnscrypt_status()
+    dns_checks = [
+        diagnostic_check("timer", "Timer", dns["timer"] == "active", dns["timer"]),
+        diagnostic_check("proxy", "DNSCrypt proxy", dns["proxyService"] == "active", dns["proxyService"]),
+        diagnostic_check("forwarding", "Forwarding rules", dns["forwarding"] > 0, dns["forwarding"]),
+        diagnostic_check("route", "DNS route", bool(dns["route"].get("iface")), dns["route"].get("raw", "")),
+    ]
+    sections = projects + [{"key": "dnscrypt", "title": "DNSCrypt", "checks": dns_checks, "ok": all(item["ok"] for item in dns_checks)}]
+    total = sum(len(section["checks"]) for section in sections)
+    passed = sum(sum(1 for check in section["checks"] if check["ok"]) for section in sections)
+    return {
+        "ok": passed == total,
+        "passed": passed,
+        "total": total,
+        "durationMs": round((time.monotonic() - started) * 1000),
+        "generatedAt": int(time.time()),
+        "sections": sections,
+    }
 
 
 def overview_payload():
@@ -1006,6 +1400,14 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def end_headers(self):
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        self.send_header("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+        super().end_headers()
+
     def is_authenticated(self):
         cookies = parse_cookies(self.headers.get("Cookie", ""))
         return verify_session(cookies.get("urm_session"))
@@ -1016,7 +1418,26 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json({"ok": False, "output": "Unauthorized"}, 401)
         return False
 
+    def webauthn_context(self):
+        origin = self.headers.get("Origin", "")
+        parsed_origin = urlparse(origin)
+        host = (self.headers.get("Host", "").split(":", 1)[0] or "").strip("[]")
+        if parsed_origin.scheme != "https" or not parsed_origin.hostname or parsed_origin.hostname != host:
+            raise ValueError("Passkeys require this page to be opened over trusted HTTPS")
+        return parsed_origin.hostname, origin
+
+    def redirect_to_https(self):
+        if not PUBLIC_URL or self.client_address[0] in ("127.0.0.1", "::1") or self.headers.get("X-Forwarded-Proto", "").lower() == "https":
+            return False
+        self.send_response(308)
+        self.send_header("Location", f"{PUBLIC_URL}{self.path}")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        return True
+
     def do_GET(self):
+        if self.redirect_to_https():
+            return
         parsed = urlparse(self.path)
         if parsed.path == "/api/auth/me":
             config = ensure_auth_config()
@@ -1026,6 +1447,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "username": config.get("username", ""),
                 "avatar": avatar_url(config),
                 "logo": brand_logo_url(config),
+                "passkeys": len(config.get("passkeys") or []),
             })
             return
         if parsed.path.startswith("/api/brand/"):
@@ -1080,6 +1502,9 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/files":
             self.send_json(editable_payload())
             return
+        if parsed.path == "/api/backups":
+            self.send_json({"backups": list_config_backups()})
+            return
         if parsed.path.startswith("/api/asset/providers/"):
             filename = Path(parsed.path).name
             path = ISP_ICONS["dir"] / filename
@@ -1125,41 +1550,150 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        if PUBLIC_URL and self.client_address[0] not in ("127.0.0.1", "::1") and self.headers.get("X-Forwarded-Proto", "").lower() != "https":
+            self.send_json({"ok": False, "output": "HTTPS is required"}, 403)
+            return
         parsed = urlparse(self.path)
-        if parsed.path not in ("/api/action", "/api/files", "/api/auth/login", "/api/auth/logout", "/api/auth/avatar", "/api/auth/logo", "/api/auth/profile", "/api/assets/download"):
+        if parsed.path not in ("/api/action", "/api/files", "/api/files/validate", "/api/diagnostics", "/api/backups/create", "/api/backups/restore", "/api/auth/login", "/api/auth/logout", "/api/auth/passkey/options", "/api/auth/passkey/verify", "/api/auth/passkey/register/options", "/api/auth/passkey/register", "/api/auth/avatar", "/api/auth/logo", "/api/auth/profile", "/api/assets/download"):
             self.send_json({"ok": False, "output": "Not found"}, 404)
             return
+        origin = self.headers.get("Origin", "")
+        if origin and urlparse(origin).netloc != self.headers.get("Host", ""):
+            self.send_json({"ok": False, "output": "Origin mismatch"}, 403)
+            return
         length = int(self.headers.get("Content-Length", "0"))
+        if length > 2 * 1024 * 1024:
+            self.send_json({"ok": False, "output": "Request is too large"}, 413)
+            return
         try:
             payload = json.loads(self.rfile.read(length) or b"{}")
         except json.JSONDecodeError:
             self.send_json({"ok": False, "output": "Invalid JSON"}, 400)
             return
         if parsed.path == "/api/auth/login":
+            address = self.client_address[0]
+            if not login_allowed(address):
+                self.send_json({"ok": False, "output": "Too many login attempts. Try again in a few minutes."}, 429)
+                return
             config = ensure_auth_config()
             if payload.get("username") == config.get("username") and verify_password(payload.get("password", ""), config):
+                clear_login_failures(address)
                 session = make_session(config["username"])
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
-                self.send_header("Set-Cookie", f"urm_session={session}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_TTL}")
+                self.send_header("Set-Cookie", f"urm_session={session}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age={SESSION_TTL}")
                 body = json.dumps({"ok": True, "name": config.get("name", ""), "avatar": avatar_url(config)}, ensure_ascii=False).encode("utf-8")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
                 return
+            record_login_failure(address)
             self.send_json({"ok": False, "output": "Invalid login or password"}, 403)
+            return
+        if parsed.path == "/api/auth/passkey/options":
+            try:
+                rp_id, origin = self.webauthn_context()
+                config = ensure_auth_config()
+                passkeys = config.get("passkeys") or []
+                if not passkeys:
+                    raise ValueError("No Passkeys are registered")
+                token, challenge = new_webauthn_challenge("authenticate", rp_id, origin, config["username"])
+                self.send_json({
+                    "ok": True,
+                    "token": token,
+                    "publicKey": {
+                        "challenge": b64url_encode(challenge),
+                        "rpId": rp_id,
+                        "timeout": 60000,
+                        "userVerification": "required",
+                        "allowCredentials": [{"type": "public-key", "id": item["id"]} for item in passkeys],
+                    },
+                })
+            except (ValueError, RuntimeError) as error:
+                self.send_json({"ok": False, "output": str(error)}, 400)
+            return
+        if parsed.path == "/api/auth/passkey/verify":
+            try:
+                challenge = take_webauthn_challenge(payload.get("token"), "authenticate")
+                config = ensure_auth_config()
+                credential_id = str(payload.get("credential", {}).get("id", ""))
+                passkey = next((item for item in config.get("passkeys", []) if item.get("id") == credential_id), None)
+                if not passkey:
+                    raise ValueError("Unknown Passkey")
+                counter = verify_passkey_assertion(passkey, payload.get("credential", {}).get("response", {}), challenge)
+                previous_counter = int(passkey.get("signCount", 0))
+                if previous_counter and counter and counter <= previous_counter:
+                    raise ValueError("Passkey counter replay detected")
+                passkey["signCount"] = max(int(passkey.get("signCount", 0)), counter)
+                write_json(AUTH_FILE, config)
+                os.chmod(AUTH_FILE, 0o600)
+                session = make_session(config["username"])
+                body = json.dumps({"ok": True}, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Set-Cookie", f"urm_session={session}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age={SESSION_TTL}")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            except (ValueError, TypeError, RuntimeError, OSError, struct.error, binascii.Error, json.JSONDecodeError) as error:
+                self.send_json({"ok": False, "output": str(error)}, 403)
             return
         if parsed.path == "/api/auth/logout":
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Set-Cookie", "urm_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax")
+            self.send_header("Set-Cookie", "urm_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict")
             body = b'{"ok": true}'
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
             return
         if not self.require_auth():
+            return
+        if parsed.path == "/api/auth/passkey/register/options":
+            try:
+                rp_id, origin = self.webauthn_context()
+                config = ensure_auth_config()
+                token, challenge = new_webauthn_challenge("register", rp_id, origin, config["username"])
+                user_id = hashlib.sha256(config["username"].encode("utf-8")).digest()[:16]
+                self.send_json({
+                    "ok": True,
+                    "token": token,
+                    "publicKey": {
+                        "challenge": b64url_encode(challenge),
+                        "rp": {"name": "UniFi Routing Manager", "id": rp_id},
+                        "user": {"id": b64url_encode(user_id), "name": config["username"], "displayName": config.get("name") or config["username"]},
+                        "pubKeyCredParams": [{"type": "public-key", "alg": -7}],
+                        "timeout": 60000,
+                        "attestation": "none",
+                        "authenticatorSelection": {"residentKey": "preferred", "userVerification": "required"},
+                        "excludeCredentials": [{"type": "public-key", "id": item["id"]} for item in config.get("passkeys", [])],
+                    },
+                })
+            except (ValueError, RuntimeError) as error:
+                self.send_json({"ok": False, "output": str(error)}, 400)
+            return
+        if parsed.path == "/api/auth/passkey/register":
+            try:
+                challenge = take_webauthn_challenge(payload.get("token"), "register")
+                credential = payload.get("credential", {})
+                client_data = verify_client_data(credential.get("response", {}).get("clientDataJSON", ""), challenge["challenge"], "webauthn.create", challenge["origin"])
+                if not client_data:
+                    raise ValueError("Invalid Passkey registration")
+                credential_id, public_key, counter = parse_registration_auth_data(b64url_decode(credential.get("response", {}).get("attestationObject", "")), challenge["rpId"])
+                encoded_id = b64url_encode(credential_id)
+                if encoded_id != credential.get("id"):
+                    raise ValueError("Passkey credential ID mismatch")
+                config = ensure_auth_config()
+                passkeys = [item for item in config.get("passkeys", []) if item.get("id") != encoded_id]
+                passkeys.append({"id": encoded_id, "publicKeyPem": public_key, "signCount": counter, "createdAt": int(time.time()), "name": str(payload.get("name") or "Passkey")[:64]})
+                config["passkeys"] = passkeys
+                write_json(AUTH_FILE, config)
+                os.chmod(AUTH_FILE, 0o600)
+                self.send_json({"ok": True, "count": len(passkeys)})
+            except (ValueError, TypeError, RuntimeError, OSError, struct.error, binascii.Error, json.JSONDecodeError) as error:
+                self.send_json({"ok": False, "output": str(error)}, 400)
             return
         if parsed.path == "/api/auth/avatar":
             filename = safe_asset_name(payload.get("filename", ""), allowed=(".png", ".jpg", ".jpeg"))
@@ -1216,7 +1750,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
-            self.send_header("Set-Cookie", f"urm_session={session}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_TTL}")
+            self.send_header("Set-Cookie", f"urm_session={session}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age={SESSION_TTL}")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -1224,8 +1758,23 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/assets/download":
             self.send_json(download_asset(payload.get("kind", ""), payload.get("url", ""), payload.get("filename", "")))
             return
+        if parsed.path == "/api/files/validate":
+            validation = validate_editable_content(payload.get("key", ""), payload.get("content", ""))
+            self.send_json(validation)
+            return
         if parsed.path == "/api/files":
-            self.send_json(save_editable_file(payload.get("key", ""), payload.get("content", "")))
+            result = save_editable_file(payload.get("key", ""), payload.get("content", ""))
+            self.send_json(result, 200 if result["ok"] else 400)
+            return
+        if parsed.path == "/api/diagnostics":
+            self.send_json(diagnostics_payload())
+            return
+        if parsed.path == "/api/backups/create":
+            self.send_json({"ok": True, "backup": create_config_backup("manual")})
+            return
+        if parsed.path == "/api/backups/restore":
+            result = restore_config_backup(str(payload.get("id", "")))
+            self.send_json(result, 200 if result["ok"] else 400)
             return
         self.send_json(perform_action(payload.get("action", "")))
 
@@ -1242,7 +1791,6 @@ def main():
     except OSError as error:
         if error.errno == 98:
             print(f"Port {PORT} is already in use.")
-            print(f"Try another port: UNIFI_WEB_PORT=8091 python3 web/server.py")
             sys.exit(1)
         raise
     display_host = "device-lan-ip" if HOST == "0.0.0.0" else HOST

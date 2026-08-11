@@ -7,7 +7,7 @@
     <link id="favicon" rel="icon" href="/favicon.png" type="image/png">
     <link rel="stylesheet" href="/styles.css">
   </head>
-  <body class="dark">
+  <body class="dark auth-pending">
     <span id="rootPath" hidden></span>
     <aside class="sidebar">
       <div class="brand">
@@ -25,6 +25,7 @@
         <button class="nav-item" type="button" data-nav="routing"><span data-nav-icon="routing"></span><span data-i18n="routing">Routing</span></button>
         <button class="nav-item" type="button" data-nav="dns"><span data-nav-icon="dns"></span><span>DNS</span></button>
         <button class="nav-item" type="button" data-nav="providers"><span data-nav-icon="providers"></span><span data-i18n="providers">Providers</span></button>
+        <button class="nav-item" type="button" data-nav="health"><span data-nav-icon="health"></span><span data-i18n="health">Diagnostics</span></button>
         <button class="nav-item" type="button" data-nav="logs"><span data-nav-icon="logs"></span><span data-i18n="logs">Logs</span></button>
         <button class="nav-item" type="button" data-nav="settings"><span data-nav-icon="settings"></span><span data-i18n="settings">Settings</span></button>
       </nav>
@@ -119,6 +120,24 @@
         </section>
       </div>
 
+      <div class="page" data-page="health" hidden>
+        <section class="panel">
+          <div class="panel-head">
+            <div><h2 data-i18n="routeDiagnostics">Route diagnostics</h2><p data-i18n="routeDiagnosticsText">Checks interfaces, policy rules, routing tables and external connectivity.</p></div>
+            <button id="runDiagnosticsBtn" type="button"><span data-static-icon="diagnostic"></span><span data-i18n="runDiagnostics">Run diagnostics</span></button>
+          </div>
+          <div class="diagnostic-summary" id="diagnosticSummary"><p class="empty" data-i18n="diagnosticsNotRun">Diagnostics have not been run yet.</p></div>
+          <div class="diagnostic-results" id="diagnosticResults"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <div><h2 data-i18n="configurationBackups">Configuration backups</h2><p data-i18n="configurationBackupsText">Automatic snapshots are created before every change and restore.</p></div>
+            <button id="createBackupBtn" type="button"><span data-static-icon="backup"></span><span data-i18n="createBackup">Create backup</span></button>
+          </div>
+          <div class="backup-list" id="backupList"><p class="empty" data-i18n="loading">Loading...</p></div>
+        </section>
+      </div>
+
       <div class="page" data-page="settings" hidden>
       <section class="panel" id="editor">
         <div class="panel-head">
@@ -131,26 +150,31 @@
           <article class="editor-card">
             <div><h3 data-i18n="cloudDomains">Cloud domains</h3><p data-editor-path="cloud.domains"></p></div>
             <textarea data-editor="cloud.domains" spellcheck="false"></textarea>
+            <p class="editor-validation" data-validation="cloud.domains"></p>
             <button data-save-editor="cloud.domains" data-i18n="save">Save</button>
           </article>
           <article class="editor-card">
             <div><h3 data-i18n="cloudNetworks">Cloud networks</h3><p data-editor-path="cloud.networks"></p></div>
             <textarea data-editor="cloud.networks" spellcheck="false"></textarea>
+            <p class="editor-validation" data-validation="cloud.networks"></p>
             <button data-save-editor="cloud.networks" data-i18n="save">Save</button>
           </article>
           <article class="editor-card">
             <div><h3 data-i18n="updatesDomains">Updates domains</h3><p data-editor-path="updates.domains"></p></div>
             <textarea data-editor="updates.domains" spellcheck="false"></textarea>
+            <p class="editor-validation" data-validation="updates.domains"></p>
             <button data-save-editor="updates.domains" data-i18n="save">Save</button>
           </article>
           <article class="editor-card">
             <div><h3 data-i18n="updatesNetworks">Updates networks</h3><p data-editor-path="updates.networks"></p></div>
             <textarea data-editor="updates.networks" spellcheck="false"></textarea>
+            <p class="editor-validation" data-validation="updates.networks"></p>
             <button data-save-editor="updates.networks" data-i18n="save">Save</button>
           </article>
           <article class="editor-card">
             <div><h3 data-i18n="wireGuardMap">WireGuard map</h3><p data-editor-path="wg.map"></p></div>
             <textarea data-editor="wg.map" spellcheck="false"></textarea>
+            <p class="editor-validation" data-validation="wg.map"></p>
             <button data-save-editor="wg.map" data-i18n="save">Save</button>
           </article>
         </div>
@@ -186,6 +210,7 @@
         <input id="loginUser" autocomplete="username" placeholder="Login" data-i18n-placeholder="login">
         <input id="loginPass" autocomplete="current-password" type="password" placeholder="Password" data-i18n-placeholder="password">
         <button class="primary" type="submit" data-i18n="signIn">Sign in</button>
+        <button class="passkey-button" id="passkeyLoginBtn" type="button" hidden><span data-static-icon="fingerprint"></span><span data-i18n="signInPasskey">Face ID / Touch ID</span></button>
       </form>
     </div>
     <div class="modal" id="editorModal" hidden>
@@ -226,6 +251,7 @@
             <label><span data-i18n="confirmPassword">Confirm new password</span><input id="profileConfirmPassword" autocomplete="new-password" type="password" minlength="8" placeholder="Repeat new password" data-i18n-placeholder="repeatPassword"></label>
           </div>
           <button class="primary" type="submit" data-i18n="saveAccount">Save account</button>
+          <button class="passkey-button" id="registerPasskeyBtn" type="button" hidden><span data-static-icon="fingerprint"></span><span data-i18n="addPasskey">Add Face ID / Touch ID</span></button>
         </form>
       </div>
     </div>
