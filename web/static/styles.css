@@ -164,6 +164,13 @@ main {
   min-width: 64px;
 }
 
+.flag-select {
+  width: 58px;
+  min-width: 58px;
+  padding-left: 10px;
+  font-size: 18px;
+}
+
 .avatar-button {
   width: 38px;
   padding: 0;
