@@ -177,6 +177,19 @@ ensure_runtime_files() {
     "$PROJECT_ROOT/ubnt-dnscrypt/domains.txt"
 }
 
+remove_legacy_units() {
+  systemctl disable --now \
+    custom-unifi-icons.timer custom-unifi-icons.service \
+    ubnt-cloud-aws-networks.timer ubnt-cloud-aws-networks.service \
+    2>/dev/null || true
+  rm -f \
+    /etc/systemd/system/custom-unifi-icons.service \
+    /etc/systemd/system/custom-unifi-icons.timer \
+    /etc/systemd/system/ubnt-cloud-aws-networks.service \
+    /etc/systemd/system/ubnt-cloud-aws-networks.timer
+  systemctl reset-failed custom-unifi-icons.service ubnt-cloud-aws-networks.service 2>/dev/null || true
+}
+
 configure_wg_map() {
   shared_map="$PROJECT_ROOT/wg-map.conf"
   [ -s "$shared_map" ] && return 0
@@ -270,6 +283,7 @@ Path(path).write_text(json.dumps({
 install_all() {
   require_root
   require_file "$PROJECT_ROOT/web/install-service.sh"
+  remove_legacy_units
   ensure_runtime_files
   configure_wg_map
   configure_auth
