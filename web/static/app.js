@@ -652,7 +652,7 @@ function renderStatus(data) {
     <div><span>${t("icons")}</span><strong>${escapeHtml(data.ispIcons.icons)}</strong></div>
   `;
   $("#iconsList").innerHTML = (data.ispIcons.items || [])
-    .map((item) => `<article class="isp-icon-item"><img src="${escapeHtml(item.url)}" alt=""><span>${escapeHtml(item.name)}</span></article>`)
+    .map((item) => `<article class="isp-icon-item" title="${escapeHtml(item.name)}"><img src="${escapeHtml(item.url)}" alt=""><span>${escapeHtml(item.name.replace(/_101x101\.png$/i, ""))}</span></article>`)
     .join("") || `<p>${t("noIcons")}</p>`;
   const iconsActive = Boolean(data.ispIcons.exists && Number(data.ispIcons.icons) > 0);
   $("#iconsActions").innerHTML = iconsActive
@@ -685,20 +685,27 @@ async function loadEditors() {
   });
 }
 
+function renderUserIdentity(me) {
+  const initials = (me.name || me.username || "UR").slice(0, 2).toUpperCase();
+  $("#avatarInitials").textContent = initials;
+  $("#profileAvatarInitials").textContent = initials;
+  $("#profileDisplayName").textContent = me.name || me.username || "Administrator";
+  for (const [imageSelector, initialsSelector] of [["#avatarImg", "#avatarInitials"], ["#profileAvatarImg", "#profileAvatarInitials"]]) {
+    const image = $(imageSelector);
+    const text = $(initialsSelector);
+    image.hidden = !me.avatar;
+    text.hidden = Boolean(me.avatar);
+    if (me.avatar) image.src = me.avatar;
+  }
+}
+
 async function checkAuth() {
   const me = await getJson("/api/auth/me");
   state.me = me;
   const modal = $("#loginModal");
   modal.hidden = Boolean(me.authenticated);
   applyBranding(me.logo);
-  if (me.authenticated) {
-    $("#avatarInitials").textContent = (me.name || me.username || "UR").slice(0, 2).toUpperCase();
-    if (me.avatar) {
-      $("#avatarImg").src = me.avatar;
-      $("#avatarImg").hidden = false;
-      $("#avatarInitials").hidden = true;
-    }
-  }
+  if (me.authenticated) renderUserIdentity(me);
   return me.authenticated;
 }
 
@@ -845,7 +852,9 @@ function enhanceButtons(force = false) {
 
   const refreshBtn = $("#refreshBtn");
   if (refreshBtn && (!refreshBtn.querySelector(".icon") || force)) {
-    refreshBtn.innerHTML = `${icon("refresh")}<span>${t("refresh")}</span>`;
+    refreshBtn.innerHTML = icon("refresh");
+    refreshBtn.title = t("refresh");
+    refreshBtn.setAttribute("aria-label", t("refresh"));
   }
 }
 
@@ -946,11 +955,11 @@ async function uploadAvatar() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ filename: file.name, data }),
     });
+    state.me = { ...state.me, avatar: result.avatar };
+    renderUserIdentity(state.me);
     showToast(result.ok ? t("avatarUpdated") : result.output || t("failed"));
     $("#avatarFile").value = "";
     $("#avatarFileName").textContent = t("noFileSelected");
-    $("#profileModal").hidden = true;
-    await checkAuth();
   } catch (error) {
     showToast(error.message || t("failed"));
   }
@@ -1059,8 +1068,8 @@ $("#brandLogoFile").addEventListener("change", () => uploadBrandLogo($("#brandLo
 $("#chooseAvatar").addEventListener("click", () => $("#avatarFile").click());
 $("#avatarFile").addEventListener("change", () => {
   $("#avatarFileName").textContent = $("#avatarFile").files[0]?.name || t("noFileSelected");
+  if ($("#avatarFile").files[0]) uploadAvatar();
 });
-$("#uploadAvatar").addEventListener("click", uploadAvatar);
 $("#profileForm").addEventListener("submit", (event) => {
   event.preventDefault();
   updateProfile().catch((error) => showToast(error.message));

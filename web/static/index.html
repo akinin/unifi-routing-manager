@@ -209,28 +209,26 @@
     <div class="modal" id="profileModal" hidden>
       <div class="modal-card profile-card">
         <div class="modal-head"><h2 data-i18n="profile">Profile</h2><button class="modal-close" data-close-modal type="button" data-i18n="close">Close</button></div>
-        <div class="profile-section">
-          <h3 data-i18n="avatar">Avatar</h3>
+        <div class="profile-identity">
           <input id="avatarFile" type="file" accept="image/png,image/jpeg" hidden>
-          <div class="file-picker">
+          <span class="profile-avatar"><span id="profileAvatarInitials">UR</span><img id="profileAvatarImg" alt="" hidden></span>
+          <div class="profile-avatar-copy">
+            <strong id="profileDisplayName">Administrator</strong>
             <button id="chooseAvatar" type="button" data-i18n="chooseImage">Choose image</button>
-            <span id="avatarFileName" data-i18n="noFileSelected">No file selected</span>
+            <small id="avatarFileName" data-i18n="noFileSelected">No file selected</small>
           </div>
-          <button id="uploadAvatar" type="button" data-i18n="uploadAvatar">Upload avatar</button>
         </div>
         <form class="profile-section" id="profileForm">
           <h3 data-i18n="account">Account</h3>
-          <label for="profileLogin" data-i18n="login">Login</label>
-          <input id="profileLogin" autocomplete="username" maxlength="64" placeholder="Login" data-i18n-placeholder="login" required>
-          <label for="profileCurrentPassword" data-i18n="currentPassword">Current password</label>
-          <input id="profileCurrentPassword" autocomplete="current-password" type="password" placeholder="Required to save" data-i18n-placeholder="requiredToSave" required>
-          <label for="profileNewPassword" data-i18n="newPassword">New password</label>
-          <input id="profileNewPassword" autocomplete="new-password" type="password" minlength="8" placeholder="Leave empty to keep current" data-i18n-placeholder="leaveEmptyPassword">
-          <label for="profileConfirmPassword" data-i18n="confirmPassword">Confirm new password</label>
-          <input id="profileConfirmPassword" autocomplete="new-password" type="password" minlength="8" placeholder="Repeat new password" data-i18n-placeholder="repeatPassword">
+          <label><span data-i18n="login">Login</span><input id="profileLogin" autocomplete="username" maxlength="64" placeholder="Login" data-i18n-placeholder="login" required></label>
+          <label><span data-i18n="currentPassword">Current password</span><input id="profileCurrentPassword" autocomplete="current-password" type="password" placeholder="Required to save" data-i18n-placeholder="requiredToSave" required></label>
+          <div class="password-grid">
+            <label><span data-i18n="newPassword">New password</span><input id="profileNewPassword" autocomplete="new-password" type="password" minlength="8" placeholder="Leave empty to keep current" data-i18n-placeholder="leaveEmptyPassword"></label>
+            <label><span data-i18n="confirmPassword">Confirm new password</span><input id="profileConfirmPassword" autocomplete="new-password" type="password" minlength="8" placeholder="Repeat new password" data-i18n-placeholder="repeatPassword"></label>
+          </div>
           <button class="primary" type="submit" data-i18n="saveAccount">Save account</button>
         </form>
-        <button class="danger profile-logout" id="logoutBtn" type="button" data-i18n="logout">Logout</button>
+        <div class="profile-footer"><button class="danger profile-logout" id="logoutBtn" type="button" data-i18n="logout">Logout</button></div>
       </div>
     </div>
     <script src="/app.js"></script>

@@ -32,6 +32,10 @@ ubnt-dnscrypt/domains.txt
 ubnt-isp-icons/*_101x101.png
 ubnt-isp-icons/*.source
 ubnt-isp-icons/flags/
+!ubnt-isp-icons/31213_101x101.png
+!ubnt-isp-icons/31213_101x101.png.source
+!ubnt-isp-icons/44484_101x101.png
+!ubnt-isp-icons/44484_101x101.png.source
 
 */active-iface
 */active-name

@@ -706,7 +706,7 @@ body.dark .active-pill {
 .icon-gallery {
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   gap: 10px;
 }
 
@@ -743,7 +743,9 @@ body.dark .isp-icon-item img {
   color: var(--ink-soft);
   font-size: 12px;
   font-weight: 700;
-  word-break: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .editor-grid {
@@ -1255,6 +1257,126 @@ body.dark .title-row .icon.brand-mark {
   font-weight: 750;
 }
 
+.profile-card {
+  width: min(460px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.profile-card .modal-head {
+  padding: 15px 18px;
+}
+
+.profile-identity {
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.profile-avatar {
+  width: 54px;
+  height: 54px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--blue);
+  background: var(--accent-soft);
+  font-weight: 800;
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-avatar-copy {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 5px 10px;
+}
+
+.profile-avatar-copy strong {
+  grid-column: 1 / -1;
+}
+
+.profile-avatar-copy button {
+  height: 30px;
+  justify-self: start;
+}
+
+.profile-avatar-copy small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-section {
+  padding: 16px 18px;
+  gap: 9px;
+}
+
+.profile-section h3 {
+  margin-bottom: 3px;
+}
+
+.profile-section label {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.profile-section label > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.profile-section input {
+  width: 100%;
+  height: 36px;
+}
+
+.password-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.profile-section button[type="submit"] {
+  margin-top: 4px;
+}
+
+.profile-footer {
+  padding: 9px 18px 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.profile-logout {
+  height: 30px;
+  margin: 0;
+  padding: 0 4px;
+  border-color: transparent;
+  background: transparent;
+}
+
+@media (max-width: 520px) {
+  .password-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .service-card small {
   overflow: hidden;
   color: var(--muted);
@@ -1358,6 +1480,10 @@ body.dark .title-row .icon.brand-mark {
 
 .routing-grid {
   grid-template-columns: 1fr;
+}
+
+#iconsStatus {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .action-menu {
@@ -1602,6 +1728,42 @@ body.dark .title-row .icon.brand-mark {
     right: 14px;
     max-width: none;
   }
+}
+
+.sidebar-account {
+  padding: 7px;
+  grid-template-columns: 32px 54px 34px;
+  justify-content: space-between;
+  gap: 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.sidebar-account .theme-toggle,
+.sidebar-account .avatar-button {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.sidebar-account .avatar-button {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+}
+
+.sidebar-account .language-select {
+  width: 54px;
+  min-width: 54px;
+  height: 32px;
+  padding: 0 7px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 750;
 }
 
 @media (max-width: 1040px) {
