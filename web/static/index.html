@@ -77,7 +77,7 @@
         <section class="panel monitoring-panel" id="monitoring">
           <div class="panel-head">
             <div><h2 data-i18n="channelMonitoring">Channel monitoring</h2><p data-i18n="channelMonitoringText">Availability and latency during the latest checks.</p></div>
-            <span class="section-loader" id="monitoringLoader" hidden></span>
+            <div class="actions"><select id="monitoringRange" aria-label="History range"><option value="30" data-i18n="last30Minutes">30 min</option><option value="1440" data-i18n="last24Hours">24 hours</option><option value="10080" data-i18n="last7Days">7 days</option></select><span class="section-loader" id="monitoringLoader" hidden></span></div>
           </div>
           <div class="monitoring-grid" id="monitoringGrid"><p class="empty" data-i18n="loading">Loading...</p></div>
         </section>
@@ -210,7 +210,20 @@
               <label><span data-i18n="telegramWssSecret">WSS relay secret</span><input id="telegramWssSecret" type="password" autocomplete="off" placeholder="Leave empty to keep current secret" data-i18n-placeholder="keepRelaySecret"></label>
             </div>
           </details>
-          <div class="actions"><button class="primary" type="submit" data-i18n="save">Save</button><button id="testNotificationBtn" type="button" data-i18n="testNotification">Test notification</button></div>
+          <details class="notification-advanced smart-notifications">
+            <summary data-i18n="smartNotifications">Smart notification rules</summary>
+            <div>
+              <label><span data-i18n="failureThreshold">Failures before outage</span><input id="failureThreshold" type="number" min="1" max="10"></label>
+              <label><span data-i18n="recoveryThreshold">Successes before recovery</span><input id="recoveryThreshold" type="number" min="1" max="10"></label>
+              <label><span data-i18n="retryCount">Delivery retries</span><input id="retryCount" type="number" min="0" max="5"></label>
+              <label class="switch-row"><input id="quietHoursEnabled" type="checkbox"><span data-i18n="quietHours">Quiet hours</span></label>
+              <label><span data-i18n="quietStart">Quiet from</span><input id="quietStart" type="number" min="0" max="23"></label>
+              <label><span data-i18n="quietEnd">Quiet until</span><input id="quietEnd" type="number" min="0" max="23"></label>
+              <label class="switch-row"><input id="dailyDigestEnabled" type="checkbox"><span data-i18n="dailyDigestEnabled">Daily summary</span></label>
+              <label><span data-i18n="dailyDigestHour">Summary hour</span><input id="dailyDigestHour" type="number" min="0" max="23"></label>
+            </div>
+          </details>
+          <div class="actions"><button class="primary" type="submit" data-i18n="save">Save</button><button id="testNotificationBtn" type="button" data-i18n="testNotification">Test notification</button><button id="enablePwaNotifications" type="button" data-i18n="enablePwaNotifications">Enable PWA notifications</button></div>
         </form>
       </section>
       </div>
@@ -220,6 +233,8 @@
           <div class="panel-head events-head">
             <div><h2 data-i18n="eventHistory">Event history</h2><p data-i18n="eventHistoryText">Connection changes and notification delivery status.</p></div>
             <div class="actions">
+              <button id="exportEventsCsv" type="button">CSV</button>
+              <button id="exportEventsJson" type="button">JSON</button>
               <button id="markAllEventsRead" type="button" data-i18n="markAllRead">Mark all read</button>
               <button id="clearReadEvents" type="button" class="danger" data-i18n="clearRead">Clear read</button>
             </div>
@@ -231,6 +246,7 @@
               <option value="channel_online" data-i18n="recoveries">Recoveries</option>
               <option value="ip_changed" data-i18n="ipChanges">IP changes</option>
               <option value="notification_test" data-i18n="notificationTests">Notification tests</option>
+              <option value="daily_digest" data-i18n="dailyDigest">Daily summary</option>
             </select>
             <label class="switch-row compact-switch"><input id="unreadEventsOnly" type="checkbox"><span data-i18n="unreadOnly">Unread only</span></label>
             <span id="eventSummary" class="event-summary"></span>

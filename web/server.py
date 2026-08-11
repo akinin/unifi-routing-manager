@@ -13,11 +13,14 @@ import hmac
 import secrets
 import base64
 import binascii
+import csv
+import io
 import ipaddress
 import tarfile
 import tempfile
 import difflib
 import urllib.request
+import urllib.error
 import socket
 import ssl
 from concurrent.futures import ThreadPoolExecutor
@@ -910,6 +913,14 @@ def notification_settings(include_secret=False):
         "telegramWssUrl": str(data.get("telegramWssUrl") or ""),
         "telegramWssConfigured": bool(data.get("telegramWssUrl") and data.get("telegramWssSecret")),
         "webhookUrl": str(data.get("webhookUrl") or ""),
+        "failureThreshold": max(1, min(int(data.get("failureThreshold") or 3), 10)),
+        "recoveryThreshold": max(1, min(int(data.get("recoveryThreshold") or 2), 10)),
+        "retryCount": max(0, min(int(data.get("retryCount") if data.get("retryCount") is not None else 2), 5)),
+        "quietHoursEnabled": bool(data.get("quietHoursEnabled")),
+        "quietStart": max(0, min(int(data.get("quietStart") if data.get("quietStart") is not None else 22), 23)),
+        "quietEnd": max(0, min(int(data.get("quietEnd") if data.get("quietEnd") is not None else 8), 23)),
+        "dailyDigestEnabled": bool(data.get("dailyDigestEnabled")),
+        "dailyDigestHour": max(0, min(int(data.get("dailyDigestHour") if data.get("dailyDigestHour") is not None else 9), 23)),
     }
     if include_secret:
         result["telegramBotToken"] = str(data.get("telegramBotToken") or "")
@@ -935,7 +946,16 @@ def save_notification_settings(payload):
         return {"ok": False, "output": "Telegram relay URL must use WSS"}
     if wss_secret and len(wss_secret) < 32:
         return {"ok": False, "output": "Telegram relay secret must contain at least 32 characters"}
-    data = {"enabled": bool(payload.get("enabled")), "telegramBotToken": token, "telegramChatId": chat_id, "telegramTransport": transport, "telegramWssUrl": wss_url, "telegramWssSecret": wss_secret, "webhookUrl": webhook}
+    def bounded(name, default, minimum, maximum):
+        try:
+            return max(minimum, min(int(payload.get(name, default)), maximum))
+        except (TypeError, ValueError):
+            return default
+    data = {"enabled": bool(payload.get("enabled")), "telegramBotToken": token, "telegramChatId": chat_id, "telegramTransport": transport, "telegramWssUrl": wss_url, "telegramWssSecret": wss_secret, "webhookUrl": webhook,
+            "failureThreshold": bounded("failureThreshold", current.get("failureThreshold", 3), 1, 10), "recoveryThreshold": bounded("recoveryThreshold", current.get("recoveryThreshold", 2), 1, 10),
+            "retryCount": bounded("retryCount", current.get("retryCount", 2), 0, 5), "quietHoursEnabled": bool(payload.get("quietHoursEnabled")),
+            "quietStart": bounded("quietStart", current.get("quietStart", 22), 0, 23), "quietEnd": bounded("quietEnd", current.get("quietEnd", 8), 0, 23),
+            "dailyDigestEnabled": bool(payload.get("dailyDigestEnabled")), "dailyDigestHour": bounded("dailyDigestHour", current.get("dailyDigestHour", 9), 0, 23)}
     write_json(NOTIFICATION_FILE, data)
     os.chmod(NOTIFICATION_FILE, 0o600)
     return {"ok": True, "settings": notification_settings(), "output": "Notification settings saved"}
@@ -1015,7 +1035,7 @@ def telegram_send_wss(url, relay_secret, bot_token, chat_id, message):
             return True
 
 
-def add_event(kind, severity, source, details=None, notification="not_requested"):
+def add_event(kind, severity, source, details=None, notification="not_requested", notification_message=""):
     event = {
         "id": f"{int(time.time() * 1000)}-{secrets.token_hex(3)}",
         "time": int(time.time()),
@@ -1026,9 +1046,18 @@ def add_event(kind, severity, source, details=None, notification="not_requested"
         "read": False,
         "notification": notification,
     }
+    if notification_message:
+        event["notificationMessage"] = str(notification_message)[:4096]
     with EVENT_LOCK:
         data = read_json(EVENT_FILE, {"events": []})
         events = data.get("events") if isinstance(data.get("events"), list) else []
+        if events and events[-1].get("kind") == event["kind"] and events[-1].get("source") == event["source"] and event["time"] - int(events[-1].get("time") or 0) <= 300:
+            existing = events[-1]
+            existing.update({"time": event["time"], "details": event["details"], "read": False, "notification": notification, "count": int(existing.get("count") or 1) + 1})
+            if notification_message:
+                existing["notificationMessage"] = event["notificationMessage"]
+            write_json(EVENT_FILE, {"events": events[-EVENT_LIMIT:], "updatedAt": event["time"]})
+            return existing["id"]
         events.append(event)
         write_json(EVENT_FILE, {"events": events[-EVENT_LIMIT:], "updatedAt": event["time"]})
     return event["id"]
@@ -1042,7 +1071,7 @@ def update_event_notification(event_id, result):
         changed = False
         for event in data.get("events", []):
             if event.get("id") == event_id:
-                event["notification"] = "sent" if result.get("ok") else "failed"
+                event["notification"] = result.get("notification") or ("sent" if result.get("ok") else "failed")
                 event["notificationOutput"] = str(result.get("output") or "")[:240]
                 changed = True
                 break
@@ -1055,12 +1084,24 @@ def events_payload(kind="all", unread_only=False, limit=200):
     data = read_json(EVENT_FILE, {"events": []})
     all_events = data.get("events") if isinstance(data.get("events"), list) else []
     unread = sum(1 for event in all_events if not event.get("read"))
-    events = list(reversed(all_events))
+    events = [{key: value for key, value in event.items() if key != "notificationMessage"} for event in reversed(all_events)]
     if kind != "all":
         events = [event for event in events if event.get("kind") == kind]
     if unread_only:
         events = [event for event in events if not event.get("read")]
     return {"events": events[:max(1, min(int(limit), 500))], "unread": unread, "total": len(all_events), "updatedAt": data.get("updatedAt", 0)}
+
+
+def events_export(export_format):
+    events = events_payload(limit=500)["events"]
+    if export_format == "json":
+        return json.dumps({"events": events}, ensure_ascii=False, indent=2).encode("utf-8"), "application/json", "urm-events.json"
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["time", "kind", "severity", "source", "read", "notification", "details"])
+    for event in events:
+        writer.writerow([event.get("time"), event.get("kind"), event.get("severity"), event.get("source"), event.get("read"), event.get("notification"), json.dumps(event.get("details", {}), ensure_ascii=False)])
+    return output.getvalue().encode("utf-8-sig"), "text/csv; charset=utf-8", "urm-events.csv"
 
 
 def events_action(payload):
@@ -1085,42 +1126,63 @@ def events_action(payload):
     return {"ok": True, "output": "Events updated"}
 
 
-def send_notification(message, event_id=None):
+def in_quiet_hours(settings, now=None):
+    if not settings.get("quietHoursEnabled"):
+        return False
+    hour = (now or time.localtime()).tm_hour
+    start, end = settings.get("quietStart", 22), settings.get("quietEnd", 8)
+    if start == end:
+        return False
+    return start <= hour < end if start < end else hour >= start or hour < end
+
+
+def send_notification(message, event_id=None, force=False):
     settings = notification_settings(include_secret=True)
     if not settings.get("enabled"):
         result = {"ok": False, "output": "Notifications are disabled"}
         update_event_notification(event_id, result)
         return result
-    results = []
-    targets = 0
-    token, chat_id = settings.get("telegramBotToken"), settings.get("telegramChatId")
-    if token and chat_id:
-        targets += 1
-        delivered = False
-        transport = settings.get("telegramTransport", "auto")
-        if transport in ("auto", "wss") and settings.get("telegramWssUrl") and settings.get("telegramWssSecret"):
+    if not force and in_quiet_hours(settings):
+        result = {"ok": False, "notification": "deferred", "output": "Deferred until quiet hours end"}
+        update_event_notification(event_id, result)
+        return result
+    results, targets = [], 0
+    for attempt in range(settings.get("retryCount", 2) + 1):
+        results, targets = [], 0
+        token, chat_id = settings.get("telegramBotToken"), settings.get("telegramChatId")
+        if token and chat_id:
+            targets += 1
+            delivered = False
+            transport = settings.get("telegramTransport", "auto")
+            if transport in ("auto", "wss") and settings.get("telegramWssUrl") and settings.get("telegramWssSecret"):
+                try:
+                    delivered = telegram_send_wss(settings["telegramWssUrl"], settings["telegramWssSecret"], token, chat_id, message)
+                except (OSError, ValueError, ssl.SSLError, json.JSONDecodeError):
+                    delivered = False
+            if not delivered and transport in ("auto", "direct"):
+                url = f"https://api.telegram.org/bot{token}/sendMessage"
+                body = json.dumps({"chat_id": chat_id, "text": message}).encode("utf-8")
+                try:
+                    with urllib.request.urlopen(urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}), timeout=8) as response:
+                        delivered = response.status == 200
+                except OSError:
+                    delivered = False
+            results.append(delivered)
+        webhook = settings.get("webhookUrl")
+        if webhook:
+            targets += 1
+            body = json.dumps({"text": message, "source": "URM", "timestamp": int(time.time())}).encode("utf-8")
             try:
-                delivered = telegram_send_wss(settings["telegramWssUrl"], settings["telegramWssSecret"], token, chat_id, message)
-            except (OSError, ValueError, ssl.SSLError, json.JSONDecodeError):
-                delivered = False
-        if not delivered and transport in ("auto", "direct"):
-            url = f"https://api.telegram.org/bot{token}/sendMessage"
-            body = json.dumps({"chat_id": chat_id, "text": message}).encode("utf-8")
-            try:
-                with urllib.request.urlopen(urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}), timeout=8) as response:
-                    delivered = response.status == 200
+                with urllib.request.urlopen(urllib.request.Request(webhook, data=body, headers={"Content-Type": "application/json"}), timeout=8) as response:
+                    results.append(200 <= response.status < 300)
             except OSError:
-                delivered = False
-        results.append(delivered)
-    webhook = settings.get("webhookUrl")
-    if webhook:
-        targets += 1
-        body = json.dumps({"text": message, "source": "URM", "timestamp": int(time.time())}).encode("utf-8")
-        try:
-            with urllib.request.urlopen(urllib.request.Request(webhook, data=body, headers={"Content-Type": "application/json"}), timeout=8) as response:
-                results.append(200 <= response.status < 300)
-        except OSError:
-            results.append(False)
+                results.append(False)
+        if targets and all(results):
+            break
+        if not targets:
+            break
+        if attempt < settings.get("retryCount", 2):
+            time.sleep(min(2 ** attempt, 4))
     result = {"ok": bool(targets and all(results)), "output": f"Delivered to {sum(results)}/{targets} targets" if targets else "No notification target configured"}
     update_event_notification(event_id, result)
     return result
@@ -1129,29 +1191,45 @@ def send_notification(message, event_id=None):
 def record_monitoring(connections):
     now = int(time.time())
     changes = []
+    settings = notification_settings()
     with MONITOR_LOCK:
         data = read_json(MONITOR_FILE, {"connections": {}})
         history = data.setdefault("connections", {})
         labels = data.setdefault("labels", {})
+        states = data.setdefault("states", {})
         for item in connections:
             key = item.get("iface") or item.get("label") or "direct"
             labels[key] = item.get("label") or key
             samples = history.setdefault(key, [])
+            if samples and now - int(samples[-1].get("time") or 0) < 55:
+                continue
             sample = {"time": now, "online": bool(item.get("online")), "latencyMs": item.get("latencyMs"), "ip": item.get("ip", "N/A")}
             previous = samples[-1] if samples else None
+            state = states.setdefault(key, {"online": sample["online"], "successes": 0, "failures": 0, "outageStartedAt": 0})
+            if sample["online"]:
+                state["successes"] = int(state.get("successes") or 0) + 1
+                state["failures"] = 0
+                if not state.get("online") and state["successes"] >= settings["recoveryThreshold"]:
+                    state["online"] = True
+                    duration = max(0, now - int(state.get("outageStartedAt") or now))
+                    state["outageStartedAt"] = 0
+                    changes.append({"kind": "channel_online", "severity": "success", "source": item.get("label", key),
+                                    "details": {"connection": item.get("label", key), "interface": key, "status": "online", "durationSec": duration},
+                                    "message": f"URM: {item.get('label', key)} is online after {duration // 60}m {duration % 60}s"})
+            else:
+                state["failures"] = int(state.get("failures") or 0) + 1
+                state["successes"] = 0
+                if state.get("online") and state["failures"] >= settings["failureThreshold"]:
+                    state["online"] = False
+                    state["outageStartedAt"] = now
+                    changes.append({"kind": "channel_offline", "severity": "critical", "source": item.get("label", key),
+                                    "details": {"connection": item.get("label", key), "interface": key, "status": "offline"},
+                                    "message": f"URM: {item.get('label', key)} is offline"})
+            sample["stableOnline"] = bool(state.get("online"))
             samples.append(sample)
-            history[key] = samples[-120:]
+            history[key] = samples[-10080:]
             if previous:
-                if previous.get("online") != sample["online"]:
-                    online = sample["online"]
-                    changes.append({
-                        "kind": "channel_online" if online else "channel_offline",
-                        "severity": "success" if online else "critical",
-                        "source": item.get("label", key),
-                        "details": {"connection": item.get("label", key), "interface": key, "status": "online" if online else "offline"},
-                        "message": f"URM: {item.get('label', key)} is {'online' if online else 'offline'}",
-                    })
-                if sample["online"] and previous.get("ip") not in (None, "N/A") and previous.get("ip") != sample["ip"]:
+                if state.get("online") and previous.get("ip") not in (None, "N/A") and previous.get("ip") != sample["ip"]:
                     changes.append({
                         "kind": "ip_changed",
                         "severity": "warning",
@@ -1162,7 +1240,7 @@ def record_monitoring(connections):
         data["updatedAt"] = now
         write_json(MONITOR_FILE, data)
     for change in changes:
-        event_id = add_event(change["kind"], change["severity"], change["source"], change["details"], notification="pending")
+        event_id = add_event(change["kind"], change["severity"], change["source"], change["details"], notification="pending", notification_message=change["message"])
         threading.Thread(target=send_notification, args=(change["message"], event_id), daemon=True).start()
 
 
@@ -1180,21 +1258,60 @@ def monitored_connections():
     return connections
 
 
-def monitoring_payload():
+def monitoring_payload(limit=30):
     data = read_json(MONITOR_FILE, {"connections": {}, "updatedAt": 0})
     labels = data.get("labels", {})
     items = []
     for key, samples in data.get("connections", {}).items():
-        recent = samples[-30:]
-        online_count = sum(1 for sample in recent if sample.get("online"))
-        items.append({"id": key, "label": labels.get(key, key), "samples": recent, "availability": round(100 * online_count / len(recent), 1) if recent else 0})
+        recent = samples[-max(2, min(int(limit), 10080)):]
+        online_count = sum(1 for sample in recent if sample.get("stableOnline", sample.get("online")))
+        stride = max(1, (len(recent) + 499) // 500)
+        display_samples = recent[::stride]
+        if recent and display_samples[-1] is not recent[-1]:
+            display_samples.append(recent[-1])
+        items.append({"id": key, "label": labels.get(key, key), "samples": display_samples, "availability": round(100 * online_count / len(recent), 1) if recent else 0})
     return {"updatedAt": data.get("updatedAt", 0), "items": items, "notifications": notification_settings()}
+
+
+def flush_deferred_notifications():
+    if in_quiet_hours(notification_settings()):
+        return
+    data = read_json(EVENT_FILE, {"events": []})
+    for event in data.get("events", []):
+        if event.get("notification") == "deferred" and event.get("notificationMessage"):
+            send_notification(event["notificationMessage"], event.get("id"), force=True)
+
+
+def maybe_send_daily_digest():
+    settings = notification_settings()
+    now = time.localtime()
+    if not settings.get("dailyDigestEnabled") or now.tm_hour != settings.get("dailyDigestHour"):
+        return
+    today = time.strftime("%Y-%m-%d", now)
+    with MONITOR_LOCK:
+        data = read_json(MONITOR_FILE, {"connections": {}})
+        if data.get("digestDate") == today:
+            return
+        data["digestDate"] = today
+        write_json(MONITOR_FILE, data)
+    cutoff = int(time.time()) - 86400
+    events = [event for event in read_json(EVENT_FILE, {"events": []}).get("events", []) if int(event.get("time") or 0) >= cutoff]
+    outages = sum(1 for event in events if event.get("kind") == "channel_offline")
+    ip_changes = sum(1 for event in events if event.get("kind") == "ip_changed")
+    lines = ["URM daily summary", f"Outages: {outages}", f"External IP changes: {ip_changes}"]
+    for item in monitoring_payload(1440).get("items", []):
+        lines.append(f"{item['label']}: {item['availability']}% availability")
+    message = "\n".join(lines)
+    event_id = add_event("daily_digest", "info", "URM", {"outages": outages, "ipChanges": ip_changes}, notification="pending", notification_message=message)
+    send_notification(message, event_id)
 
 
 def monitor_worker():
     while True:
         try:
             monitored_connections()
+            flush_deferred_notifications()
+            maybe_send_daily_digest()
         except Exception as error:
             print(f"Monitoring error: {error}", file=sys.stderr)
         time.sleep(MONITOR_INTERVAL)
@@ -1602,7 +1719,26 @@ def diagnostics_payload():
         diagnostic_check("forwarding", "Forwarding rules", dns["forwarding"] > 0, dns["forwarding"]),
         diagnostic_check("route", "DNS route", bool(dns["route"].get("iface")), dns["route"].get("raw", "")),
     ]
-    sections = projects + [{"key": "dnscrypt", "title": "DNSCrypt", "checks": dns_checks, "ok": all(item["ok"] for item in dns_checks)}]
+    connectivity_checks = []
+    for key, title, url in (("telegram", "Telegram API", "https://api.telegram.org"), ("unifi", "UniFi Cloud", "https://unifi.ui.com")):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "URM/1"}), timeout=8) as response:
+                connectivity_checks.append(diagnostic_check(key, title, response.status < 500, f"HTTP {response.status}"))
+        except urllib.error.HTTPError as error:
+            connectivity_checks.append(diagnostic_check(key, title, error.code < 500, f"HTTP {error.code}"))
+        except OSError as error:
+            connectivity_checks.append(diagnostic_check(key, title, False, str(error)))
+    relay_url = notification_settings().get("telegramWssUrl")
+    if relay_url:
+        parsed = urlparse(relay_url)
+        try:
+            with socket.create_connection((parsed.hostname, parsed.port or 443), timeout=6) as tcp:
+                with ssl.create_default_context().wrap_socket(tcp, server_hostname=parsed.hostname):
+                    connectivity_checks.append(diagnostic_check("wss", "Telegram WSS relay", True, parsed.hostname))
+        except OSError as error:
+            connectivity_checks.append(diagnostic_check("wss", "Telegram WSS relay", False, str(error)))
+    sections = projects + [{"key": "dnscrypt", "title": "DNSCrypt", "checks": dns_checks, "ok": all(item["ok"] for item in dns_checks)},
+                           {"key": "connectivity", "title": "External services", "checks": connectivity_checks, "ok": all(item["ok"] for item in connectivity_checks)}]
     total = sum(len(section["checks"]) for section in sections)
     passed = sum(sum(1 for check in section["checks"] if check["ok"]) for section in sections)
     return {
@@ -1825,7 +1961,12 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({"connections": monitored_connections(), "generatedAt": int(time.time())})
             return
         if parsed.path == "/api/monitoring":
-            self.send_json(monitoring_payload())
+            query = parse_qs(parsed.query)
+            try:
+                limit = int(query.get("limit", ["30"])[0])
+            except ValueError:
+                limit = 30
+            self.send_json(monitoring_payload(limit))
             return
         if parsed.path == "/api/notifications":
             self.send_json(notification_settings())
@@ -1839,6 +1980,17 @@ class Handler(SimpleHTTPRequestHandler):
             except ValueError:
                 limit = 200
             self.send_json(events_payload(kind=kind, unread_only=unread_only, limit=limit))
+            return
+        if parsed.path == "/api/events/export":
+            export_format = parse_qs(parsed.query).get("format", ["csv"])[0]
+            body, content_type, filename = events_export("json" if export_format == "json" else "csv")
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
             return
         if parsed.path == "/api/files":
             self.send_json(editable_payload())
@@ -2109,7 +2261,7 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if parsed.path == "/api/notifications/test":
             event_id = add_event("notification_test", "info", "Telegram", {"test": True}, notification="pending")
-            result = send_notification("URM: test notification", event_id)
+            result = send_notification("URM: test notification", event_id, force=True)
             self.send_json(result, 200 if result["ok"] else 400)
             return
         if parsed.path == "/api/events":

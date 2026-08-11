@@ -300,10 +300,12 @@ install_all() {
 
   systemctl daemon-reload
   install_web_service
-  systemctl start ubnt-cloud-routes.service || true
-  systemctl start ubnt-updates-routes.service || true
-  systemctl start ubnt-dnscrypt.service || true
-  systemctl restart ubnt-isp-icons.service || true
+  # Routing/DNS refreshes can spend more than a minute waiting for remote DNS.
+  # Queue them asynchronously so Web UI updates do not block on maintenance jobs.
+  systemctl start --no-block ubnt-cloud-routes.service || true
+  systemctl start --no-block ubnt-updates-routes.service || true
+  systemctl start --no-block ubnt-dnscrypt.service || true
+  systemctl restart --no-block ubnt-isp-icons.service || true
 
   echo "Installation complete."
   echo "Project: $PROJECT_ROOT"

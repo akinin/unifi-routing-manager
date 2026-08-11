@@ -16,6 +16,8 @@ const state = {
   maintenanceLoaded: false,
   notificationsLoaded: false,
   eventsLoaded: false,
+  lastEventTime: Number(localStorage.getItem("lastEventTime") || 0),
+  eventTimer: null,
 };
 
 document.documentElement.classList.toggle("standalone", window.matchMedia("(display-mode: standalone)").matches || Boolean(window.navigator.standalone));
@@ -92,6 +94,24 @@ const translations = {
     eventCenterStarted: "Event center enabled",
     oldIp: "Old IP",
     newIp: "New IP",
+    duration: "Duration",
+    dailyDigest: "Daily summary",
+    enablePwaNotifications: "Enable PWA notifications",
+    pwaNotificationsEnabled: "PWA notifications enabled",
+    pwaNotificationsUnavailable: "Notifications are unavailable or blocked in this browser.",
+    last30Minutes: "30 min",
+    last24Hours: "24 hours",
+    last7Days: "7 days",
+    smartNotifications: "Smart notification rules",
+    failureThreshold: "Failures before outage",
+    recoveryThreshold: "Successes before recovery",
+    retryCount: "Delivery retries",
+    quietHours: "Quiet hours",
+    quietStart: "Quiet from (hour)",
+    quietEnd: "Quiet until (hour)",
+    dailyDigestEnabled: "Daily summary",
+    dailyDigestHour: "Summary hour",
+    deferredNotification: "Delayed by quiet hours",
     telegramTransport: "Telegram transport",
     transportAuto: "WSS with HTTPS fallback",
     telegramWssUrl: "Telegram WSS relay",
@@ -280,6 +300,24 @@ const translations = {
     eventCenterStarted: "Центр событий включён",
     oldIp: "Старый IP",
     newIp: "Новый IP",
+    duration: "Длительность",
+    dailyDigest: "Ежедневная сводка",
+    enablePwaNotifications: "Включить уведомления PWA",
+    pwaNotificationsEnabled: "Уведомления PWA включены",
+    pwaNotificationsUnavailable: "Уведомления недоступны или заблокированы в этом браузере.",
+    last30Minutes: "30 минут",
+    last24Hours: "24 часа",
+    last7Days: "7 дней",
+    smartNotifications: "Умные правила уведомлений",
+    failureThreshold: "Ошибок до фиксации сбоя",
+    recoveryThreshold: "Успешных проверок до восстановления",
+    retryCount: "Повторов доставки",
+    quietHours: "Тихие часы",
+    quietStart: "Не уведомлять с (час)",
+    quietEnd: "Не уведомлять до (час)",
+    dailyDigestEnabled: "Ежедневная сводка",
+    dailyDigestHour: "Час отправки сводки",
+    deferredNotification: "Отложено до конца тихих часов",
     telegramTransport: "Транспорт Telegram",
     transportAuto: "WSS с резервным HTTPS",
     telegramWssUrl: "WSS relay Telegram",
@@ -626,7 +664,9 @@ function renderConnections(data) {
 }
 
 function monitoringSparkline(samples) {
-  const values = samples.map((sample) => Number(sample.latencyMs)).filter(Number.isFinite);
+  const raw = samples.map((sample) => Number(sample.latencyMs)).filter(Number.isFinite);
+  const step = Math.max(1, Math.ceil(raw.length / 160));
+  const values = raw.filter((_, index) => index % step === 0 || index === raw.length - 1);
   if (values.length < 2) return `<span class="monitoring-empty">—</span>`;
   const max = Math.max(...values, 1);
   const points = values.map((value, index) => `${(index * 100) / (values.length - 1)},${28 - (value / max) * 24}`).join(" ");
@@ -640,7 +680,7 @@ function renderMonitoring(data) {
       const latest = item.samples?.at(-1) || {};
       const latency = Number.isFinite(Number(latest.latencyMs)) ? `${Math.round(Number(latest.latencyMs))} ms` : "—";
       return `<article class="monitoring-card">
-        <div class="monitoring-title"><span class="status-dot ${latest.online ? "ok" : "bad"}"></span><strong>${escapeHtml(item.label || item.id)}</strong><span>${escapeHtml(String(item.availability))}%</span></div>
+        <div class="monitoring-title"><span class="status-dot ${(latest.stableOnline ?? latest.online) ? "ok" : "bad"}"></span><strong>${escapeHtml(item.label || item.id)}</strong><span>${escapeHtml(String(item.availability))}%</span></div>
         ${monitoringSparkline(item.samples || [])}
         <div class="monitoring-meta"><span>${t("latency")}</span><strong>${latency}</strong><span>${t("availability")}</span><strong>${escapeHtml(String(item.availability))}%</strong></div>
       </article>`;
@@ -857,6 +897,14 @@ async function loadNotificationSettings() {
   $("#telegramWssSecret").value = "";
   $("#telegramWssSecret").placeholder = data.telegramWssConfigured ? "••••••••••••" : t("keepRelaySecret");
   $("#notificationWebhook").value = data.webhookUrl || "";
+  $("#failureThreshold").value = data.failureThreshold || 3;
+  $("#recoveryThreshold").value = data.recoveryThreshold || 2;
+  $("#retryCount").value = data.retryCount ?? 2;
+  $("#quietHoursEnabled").checked = Boolean(data.quietHoursEnabled);
+  $("#quietStart").value = data.quietStart ?? 22;
+  $("#quietEnd").value = data.quietEnd ?? 8;
+  $("#dailyDigestEnabled").checked = Boolean(data.dailyDigestEnabled);
+  $("#dailyDigestHour").value = data.dailyDigestHour ?? 9;
   state.notificationsLoaded = true;
 }
 
@@ -872,6 +920,14 @@ async function saveNotificationSettings() {
       telegramWssUrl: $("#telegramWssUrl").value,
       telegramWssSecret: $("#telegramWssSecret").value,
       webhookUrl: $("#notificationWebhook").value,
+      failureThreshold: Number($("#failureThreshold").value),
+      recoveryThreshold: Number($("#recoveryThreshold").value),
+      retryCount: Number($("#retryCount").value),
+      quietHoursEnabled: $("#quietHoursEnabled").checked,
+      quietStart: Number($("#quietStart").value),
+      quietEnd: Number($("#quietEnd").value),
+      dailyDigestEnabled: $("#dailyDigestEnabled").checked,
+      dailyDigestHour: Number($("#dailyDigestHour").value),
     }),
   });
   showToast(result.output || t("notificationSaved"));
@@ -935,7 +991,7 @@ async function refresh() {
     .catch((error) => showToast(error.message))
     .finally(() => { $("#connectionsLoader").hidden = true; });
   const monitoringRequest = connectionsRequest
-    .then(() => getJson("/api/monitoring", { cache: "no-store" }))
+    .then(() => getJson(`/api/monitoring?limit=${encodeURIComponent($("#monitoringRange")?.value || "30")}`, { cache: "no-store" }))
     .then((data) => renderMonitoring(data))
     .finally(() => { $("#monitoringLoader").hidden = true; });
   try {
@@ -944,7 +1000,7 @@ async function refresh() {
     enhanceButtons();
     $("#lastUpdated").textContent = t("updatedNow");
     const optional = [connectionsRequest, monitoringRequest];
-    optional.push(state.page === "events" ? loadEvents() : getJson("/api/events?limit=1", { cache: "no-store" }).then((events) => updateEventCount(events.unread || 0)));
+    optional.push(state.page === "events" ? loadEvents() : getJson("/api/events?limit=10", { cache: "no-store" }).then((events) => { updateEventCount(events.unread || 0); notifyNewEvents(events.events || []); }));
     if (state.page === "logs") optional.push(loadLogs());
     if (state.page === "settings" && !state.filesLoaded) optional.push(loadEditors());
     if (state.page === "settings" && !state.notificationsLoaded) optional.push(loadNotificationSettings());
@@ -983,10 +1039,11 @@ function openDownload(kind) {
 function eventPresentation(item) {
   const details = item.details || {};
   if (item.kind === "channel_offline") return { title: t("channelOffline"), description: `${item.source} · ${details.interface || ""}`, icon: "diagnostic" };
-  if (item.kind === "channel_online") return { title: t("channelOnline"), description: `${item.source} · ${details.interface || ""}`, icon: "check" };
+  if (item.kind === "channel_online") return { title: t("channelOnline"), description: `${item.source} · ${t("duration")}: ${Math.floor((details.durationSec || 0) / 60)}m ${Number(details.durationSec || 0) % 60}s`, icon: "check" };
   if (item.kind === "ip_changed") return { title: t("externalIpChanged"), description: `${t("oldIp")}: ${details.oldIp || "—"} · ${t("newIp")}: ${details.newIp || "—"}`, icon: "route" };
   if (item.kind === "notification_test") return { title: t("notificationTest"), description: item.source || "Telegram", icon: "bell" };
   if (item.kind === "system_started") return { title: t("eventCenterStarted"), description: item.source || "URM", icon: "bell" };
+  if (item.kind === "daily_digest") return { title: t("dailyDigest"), description: `${t("outages")}: ${details.outages || 0} · ${t("ipChanges")}: ${details.ipChanges || 0}`, icon: "bell" };
   return { title: item.kind || t("events"), description: item.source || "URM", icon: "bell" };
 }
 
@@ -994,6 +1051,7 @@ function notificationPresentation(status) {
   if (status === "sent") return `<span class="event-delivery ok">${icon("check")}${t("delivered")}</span>`;
   if (status === "failed") return `<span class="event-delivery bad">${icon("diagnostic")}${t("deliveryFailed")}</span>`;
   if (status === "pending") return `<span class="event-delivery warn">${icon("refresh")}${t("notificationPending")}</span>`;
+  if (status === "deferred") return `<span class="event-delivery warn">${icon("moon")}${t("deferredNotification")}</span>`;
   return "";
 }
 
@@ -1006,6 +1064,7 @@ function updateEventCount(count) {
 
 function renderEvents(data) {
   const items = data.events || [];
+  notifyNewEvents(items);
   updateEventCount(Number(data.unread) || 0);
   $("#eventSummary").textContent = `${data.total || 0} · ${data.unread || 0} ${t("unreadEvents")}`;
   $("#eventList").innerHTML = items.length ? items.map((item) => {
@@ -1020,11 +1079,45 @@ function renderEvents(data) {
   state.eventsLoaded = true;
 }
 
+async function notifyNewEvents(items) {
+  const newest = Math.max(0, ...items.map((item) => Number(item.time) || 0));
+  if (!state.lastEventTime) {
+    state.lastEventTime = newest;
+    localStorage.setItem("lastEventTime", String(newest));
+    return;
+  }
+  if ("Notification" in window && Notification.permission === "granted" && navigator.serviceWorker?.controller) {
+    for (const item of [...items].reverse().filter((entry) => Number(entry.time) > state.lastEventTime && ["critical", "warning", "success"].includes(entry.severity))) {
+      const view = eventPresentation(item);
+      navigator.serviceWorker.controller.postMessage({ type: "notify", title: view.title, body: view.description, tag: `urm-${item.id}`, url: "/" });
+    }
+  }
+  if (newest > state.lastEventTime) {
+    state.lastEventTime = newest;
+    localStorage.setItem("lastEventTime", String(newest));
+  }
+}
+
+async function enablePwaNotifications() {
+  if (!("Notification" in window) || !("serviceWorker" in navigator)) throw new Error(t("pwaNotificationsUnavailable"));
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") throw new Error(t("pwaNotificationsUnavailable"));
+  await navigator.serviceWorker.ready;
+  showToast(t("pwaNotificationsEnabled"));
+}
+
 async function loadEvents() {
   const kind = $("#eventTypeFilter")?.value || "all";
   const unread = $("#unreadEventsOnly")?.checked ? "1" : "0";
   const data = await getJson(`/api/events?kind=${encodeURIComponent(kind)}&unread=${unread}`, { cache: "no-store" });
   renderEvents(data);
+}
+
+async function pollEvents() {
+  const data = await getJson("/api/events?limit=10", { cache: "no-store" });
+  updateEventCount(data.unread || 0);
+  notifyNewEvents(data.events || []);
+  if (state.page === "events") renderEvents(data);
 }
 
 async function updateEvents(action, id = "") {
@@ -1536,7 +1629,11 @@ $("#notificationForm").addEventListener("submit", (event) => {
   saveNotificationSettings().catch((error) => showToast(error.message));
 });
 $("#testNotificationBtn").addEventListener("click", () => testNotification().catch((error) => showToast(error.message)));
+$("#enablePwaNotifications").addEventListener("click", () => enablePwaNotifications().catch((error) => showToast(error.message)));
 $("#eventTypeFilter").addEventListener("change", () => loadEvents().catch((error) => showToast(error.message)));
+$("#monitoringRange").addEventListener("change", () => refresh().catch((error) => showToast(error.message)));
+$("#exportEventsCsv").addEventListener("click", () => { window.location.href = "/api/events/export?format=csv"; });
+$("#exportEventsJson").addEventListener("click", () => { window.location.href = "/api/events/export?format=json"; });
 $("#unreadEventsOnly").addEventListener("change", () => loadEvents().catch((error) => showToast(error.message)));
 $("#markAllEventsRead").addEventListener("click", () => updateEvents("mark_all_read").catch((error) => showToast(error.message)));
 $("#clearReadEvents").addEventListener("click", () => {
@@ -1573,6 +1670,11 @@ applyLanguage();
 renderLogToggle();
 enhanceButtons();
 
-checkAuth().then((ok) => ok && refresh()).catch((error) => {
-  showToast(error.message);
-});
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+
+checkAuth().then((ok) => {
+  if (!ok) return;
+  refresh();
+  clearInterval(state.eventTimer);
+  state.eventTimer = setInterval(() => pollEvents().catch(() => {}), 60000);
+}).catch((error) => showToast(error.message));

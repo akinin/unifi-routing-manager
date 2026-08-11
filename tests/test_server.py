@@ -85,6 +85,45 @@ class EventTests(unittest.TestCase):
             finally:
                 server.EVENT_FILE = original
 
+    def test_event_coalescing_export_and_quiet_hours(self):
+        with tempfile.TemporaryDirectory() as directory:
+            original = server.EVENT_FILE
+            try:
+                server.EVENT_FILE = Path(directory) / "events.json"
+                first = server.add_event("ip_changed", "warning", "WAN1", {"newIp": "192.0.2.1"})
+                second = server.add_event("ip_changed", "warning", "WAN1", {"newIp": "192.0.2.2"})
+                self.assertEqual(first, second)
+                self.assertEqual(server.events_payload()["events"][0]["count"], 2)
+                csv_body, content_type, filename = server.events_export("csv")
+                self.assertIn(b"ip_changed", csv_body)
+                self.assertIn("text/csv", content_type)
+                self.assertEqual(filename, "urm-events.csv")
+                night = server.time.struct_time((2026, 8, 12, 23, 0, 0, 2, 224, -1))
+                self.assertTrue(server.in_quiet_hours({"quietHoursEnabled": True, "quietStart": 22, "quietEnd": 8}, night))
+            finally:
+                server.EVENT_FILE = original
+
+    def test_failure_threshold_creates_outage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original = (server.EVENT_FILE, server.MONITOR_FILE, server.notification_settings, server.threading.Thread)
+            class NoopThread:
+                def __init__(self, *args, **kwargs): pass
+                def start(self): pass
+            try:
+                server.EVENT_FILE = root / "events.json"
+                server.MONITOR_FILE = root / "monitor.json"
+                server.notification_settings = lambda *args, **kwargs: {"failureThreshold": 3, "recoveryThreshold": 2}
+                server.threading.Thread = NoopThread
+                now = int(server.time.time())
+                server.write_json(server.MONITOR_FILE, {"connections": {"eth8": [{"time": now - 60, "online": False, "ip": "N/A"}]}, "states": {"eth8": {"online": True, "failures": 2, "successes": 0}}, "labels": {"eth8": "WAN1"}})
+                server.record_monitoring([{"iface": "eth8", "label": "WAN1", "online": False, "ip": "N/A", "latencyMs": None}])
+                event = server.events_payload()["events"][0]
+                self.assertEqual(event["kind"], "channel_offline")
+                self.assertEqual(event["notification"], "pending")
+            finally:
+                server.EVENT_FILE, server.MONITOR_FILE, server.notification_settings, server.threading.Thread = original
+
 
 class WebAuthnHelpersTests(unittest.TestCase):
     def test_cbor_decode(self):
