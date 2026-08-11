@@ -957,8 +957,10 @@ def record_monitoring(connections):
     with MONITOR_LOCK:
         data = read_json(MONITOR_FILE, {"connections": {}})
         history = data.setdefault("connections", {})
+        labels = data.setdefault("labels", {})
         for item in connections:
             key = item.get("iface") or item.get("label") or "direct"
+            labels[key] = item.get("label") or key
             samples = history.setdefault(key, [])
             sample = {"time": now, "online": bool(item.get("online")), "latencyMs": item.get("latencyMs"), "ip": item.get("ip", "N/A")}
             previous = samples[-1] if samples else None
@@ -991,11 +993,12 @@ def monitored_connections():
 
 def monitoring_payload():
     data = read_json(MONITOR_FILE, {"connections": {}, "updatedAt": 0})
+    labels = data.get("labels", {})
     items = []
     for key, samples in data.get("connections", {}).items():
         recent = samples[-30:]
         online_count = sum(1 for sample in recent if sample.get("online"))
-        items.append({"id": key, "samples": recent, "availability": round(100 * online_count / len(recent), 1) if recent else 0})
+        items.append({"id": key, "label": labels.get(key, key), "samples": recent, "availability": round(100 * online_count / len(recent), 1) if recent else 0})
     return {"updatedAt": data.get("updatedAt", 0), "items": items, "notifications": notification_settings()}
 
 

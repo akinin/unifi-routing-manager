@@ -17,6 +17,8 @@ const state = {
   notificationsLoaded: false,
 };
 
+document.documentElement.classList.toggle("standalone", window.matchMedia("(display-mode: standalone)").matches || Boolean(window.navigator.standalone));
+
 const $ = (selector) => document.querySelector(selector);
 
 const translations = {
@@ -569,7 +571,7 @@ function renderMonitoring(data) {
       const latest = item.samples?.at(-1) || {};
       const latency = Number.isFinite(Number(latest.latencyMs)) ? `${Math.round(Number(latest.latencyMs))} ms` : "—";
       return `<article class="monitoring-card">
-        <div class="monitoring-title"><span class="status-dot ${latest.online ? "ok" : "bad"}"></span><strong>${escapeHtml(item.id)}</strong><span>${escapeHtml(String(item.availability))}%</span></div>
+        <div class="monitoring-title"><span class="status-dot ${latest.online ? "ok" : "bad"}"></span><strong>${escapeHtml(item.label || item.id)}</strong><span>${escapeHtml(String(item.availability))}%</span></div>
         ${monitoringSparkline(item.samples || [])}
         <div class="monitoring-meta"><span>${t("latency")}</span><strong>${latency}</strong><span>${t("availability")}</span><strong>${escapeHtml(String(item.availability))}%</strong></div>
       </article>`;
