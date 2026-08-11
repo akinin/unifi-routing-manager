@@ -1983,15 +1983,15 @@ body.dark .title-row .icon.brand-mark {
   }
 
   main {
-    padding-bottom: calc(100px + env(safe-area-inset-bottom));
+    padding-bottom: calc(112px + env(safe-area-inset-bottom));
   }
 
   .mobile-tabbar {
     position: fixed;
     z-index: 10;
-    left: 10px;
-    right: 10px;
-    bottom: calc(8px + env(safe-area-inset-bottom));
+    left: 18px;
+    right: 18px;
+    bottom: calc(14px + env(safe-area-inset-bottom));
     height: 68px;
     padding: 5px;
     display: grid;
@@ -2040,7 +2040,7 @@ body.dark .title-row .icon.brand-mark {
     position: fixed;
     z-index: 11;
     right: 12px;
-    bottom: calc(84px + env(safe-area-inset-bottom));
+    bottom: calc(94px + env(safe-area-inset-bottom));
     width: min(250px, calc(100vw - 24px));
     padding: 8px;
     display: grid;
@@ -2093,11 +2093,37 @@ body.dark .title-row .icon.brand-mark {
 
   .topbar-actions {
     width: 100%;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: 10px minmax(106px, 1fr) 40px 40px 40px;
+    gap: 7px;
   }
 
   .refresh-state {
-    margin-right: auto;
+    width: 10px;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  .refresh-state #lastUpdated {
+    display: none;
+  }
+
+  #autoRefresh {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .topbar-actions .icon-button,
+  .topbar-actions .flag-select {
+    width: 40px;
+    min-width: 40px;
+  }
+
+  .topbar-actions .flag-select {
+    padding: 0;
+    appearance: none;
+    text-align: center;
+    text-align-last: center;
   }
 
   .service-overview {
@@ -2109,8 +2135,76 @@ body.dark .title-row .icon.brand-mark {
     grid-template-columns: 1fr;
   }
 
+  .table-scroll {
+    overflow: visible;
+  }
+
   .data-table {
-    min-width: 720px;
+    min-width: 0;
+    display: block;
+  }
+
+  .data-table thead {
+    display: none;
+  }
+
+  .data-table tbody {
+    padding: 10px;
+    display: grid;
+    gap: 10px;
+  }
+
+  .data-table tbody tr {
+    padding: 8px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border: 1px solid var(--line-soft);
+    border-radius: 12px;
+    background: var(--panel-raised);
+    overflow: hidden;
+  }
+
+  .data-table tbody tr.active {
+    box-shadow: inset 3px 0 0 var(--blue);
+  }
+
+  .data-table td,
+  .data-table tbody tr:last-child td {
+    min-width: 0;
+    padding: 8px;
+    border: 0;
+  }
+
+  .data-table td:first-child,
+  .data-table td:nth-child(2) {
+    grid-column: 1 / -1;
+  }
+
+  .data-table td:first-child {
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .data-table tr.active td:first-child {
+    box-shadow: none;
+  }
+
+  .data-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+
+  .data-table .inline-media {
+    max-width: 100%;
+    align-items: flex-start;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .segmented {

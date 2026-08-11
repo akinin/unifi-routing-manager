@@ -2,9 +2,15 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>UniFi Routing</title>
     <link id="favicon" rel="icon" href="/favicon.png" type="image/png">
+    <link rel="apple-touch-icon" href="/assets/brand/urm-logo.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#101319">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="URM">
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body class="dark auth-pending">
@@ -211,9 +217,9 @@
       <button class="danger" type="button" data-mobile-logout><span data-static-icon="logout"></span><span data-i18n="logout">Logout</span></button>
     </div>
     <nav class="mobile-tabbar" aria-label="Mobile navigation">
-      <button class="mobile-tab active" type="button" data-nav="overview"><span data-mobile-icon="overview"></span><span data-i18n="overview">Overview</span></button>
       <button class="mobile-tab" type="button" data-nav="routing"><span data-mobile-icon="routing"></span><span data-i18n="routing">Routing</span></button>
       <button class="mobile-tab" type="button" data-nav="dns"><span data-mobile-icon="dns"></span><span>DNS</span></button>
+      <button class="mobile-tab active" type="button" data-nav="overview"><span data-mobile-icon="overview"></span><span data-i18n="overview">Overview</span></button>
       <button class="mobile-tab" type="button" data-nav="health"><span data-mobile-icon="health"></span><span data-i18n="health">Diagnostics</span></button>
       <button class="mobile-tab mobile-more-button" type="button" data-mobile-more aria-expanded="false"><span data-static-icon="more"></span><span data-i18n="more">More</span></button>
     </nav>
