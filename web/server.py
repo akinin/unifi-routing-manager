@@ -260,7 +260,21 @@ def list_entries(path):
 
 def tail(path, lines=80):
     try:
-        data = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        if lines <= 0:
+            return ""
+        with path.open("rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            position = handle.tell()
+            chunks = []
+            newline_count = 0
+            while position > 0 and newline_count <= lines:
+                size = min(8192, position)
+                position -= size
+                handle.seek(position)
+                chunk = handle.read(size)
+                chunks.append(chunk)
+                newline_count += chunk.count(b"\n")
+        data = b"".join(reversed(chunks)).decode("utf-8", errors="replace").splitlines()
         return "\n".join(data[-lines:])
     except OSError:
         return ""
