@@ -141,14 +141,15 @@ body {
   padding-top: 14px;
   border-top: 1px solid var(--line-soft);
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
+  grid-template-columns: 38px 1fr 38px;
   align-items: center;
   gap: 8px;
 }
 
 .sidebar-logout {
-  width: 100%;
-  justify-content: flex-start;
+  width: 38px;
+  min-width: 38px;
+  grid-column: 3;
 }
 
 main {
@@ -1762,7 +1763,7 @@ body.dark .title-row .icon.brand-mark {
 
 .sidebar-account {
   padding: 7px;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: 34px 1fr 34px;
   gap: 7px;
   border: 1px solid var(--line-soft);
   border-radius: 12px;
@@ -1778,6 +1779,8 @@ body.dark .title-row .icon.brand-mark {
 }
 
 .sidebar-account .sidebar-logout {
+  width: 34px;
+  min-width: 34px;
   height: 34px;
   border-color: transparent;
   background: transparent;
