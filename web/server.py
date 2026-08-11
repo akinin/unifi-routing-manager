@@ -387,6 +387,38 @@ def slugify(value):
     return value.strip("_") or "provider"
 
 
+def provider_aliases(isp="", asname=""):
+    aliases = []
+    for value in (isp, asname):
+        value = (value or "").strip()
+        if not value:
+            continue
+        candidates = [value]
+        candidates.append(
+            re.sub(
+                r"\s+(?:ltd\.?|llc|inc\.?|corp\.?|corporation|company|co\.?|pjsc|jsc|ooo|oao|zao)$",
+                "",
+                value,
+                flags=re.IGNORECASE,
+            ).strip()
+        )
+        for candidate in candidates:
+            alias = slugify(candidate)
+            if alias != "provider" and alias not in aliases:
+                aliases.append(alias)
+    return aliases
+
+
+def write_provider_aliases(asn, isp="", asname=""):
+    if not asn or not re.match(r"^\d+$", str(asn)):
+        return
+    aliases = provider_aliases(isp, asname)
+    if aliases:
+        ISP_ICONS["dir"].mkdir(parents=True, exist_ok=True)
+        path = ISP_ICONS["dir"] / f"{asn}_101x101.png.aliases"
+        path.write_text("\n".join(aliases) + "\n", encoding="utf-8")
+
+
 def wg_map_names():
     names = {}
     for path in (ROOT / "wg-map.conf",):
@@ -443,8 +475,7 @@ def provider_icon_filename(isp="", asn=""):
     if asn:
         base = f"{asn}_101x101.png"
         path = ISP_ICONS["dir"] / base
-        marker = path.with_suffix(path.suffix + ".source")
-        if path.exists() and marker.exists() and marker.read_text(encoding="utf-8", errors="ignore").strip() == "2ip":
+        if path.exists():
             return base
     slug_path = ISP_ICONS["dir"] / f"{slugify(isp)}_101x101.png"
     if slug_path.exists():
@@ -456,12 +487,13 @@ def provider_icon_url(filename):
     return f"/api/asset/providers/{filename}" if filename else ""
 
 
-def ensure_provider_icon(isp="", asn=""):
+def ensure_provider_icon(isp="", asn="", asname=""):
     if asn:
         filename = f"{asn}_101x101.png"
         path = ISP_ICONS["dir"] / filename
         marker = path.with_suffix(path.suffix + ".source")
-        if marker.exists() and marker.read_text(encoding="utf-8", errors="ignore").strip() == "2ip" and path.exists():
+        write_provider_aliases(asn, isp, asname)
+        if path.exists():
             return filename
         ok, _ = download_url(f"https://static.2ip.io/asn_favicons/{asn}.png", path)
         if ok:
@@ -483,13 +515,14 @@ def connection_status(label, iface=None, active_for=None):
     return {
         "label": label,
         "iface": iface or "",
+        "type": "wireguard" if (iface or "").startswith("wg") else "wan",
         "ip": ip,
         "country": geo["country"],
         "countryCode": geo["countryCode"],
         "isp": geo["isp"],
         "asn": geo.get("asn", ""),
         "asname": geo.get("asname", ""),
-        "icon": provider_icon_url(ensure_provider_icon(geo["isp"], geo.get("asn", ""))),
+        "icon": provider_icon_url(ensure_provider_icon(geo["isp"], geo.get("asn", ""), geo.get("asname", ""))),
         "flag": ensure_country_flag(geo["countryCode"]),
         "activeFor": active_for or [],
         "active": bool(active_for),
@@ -503,6 +536,20 @@ def wireguard_interfaces():
     return [item for item in result["output"].split() if item]
 
 
+def wan_interfaces():
+    result = run(["ip", "-4", "route", "show", "table", "all"], timeout=8)
+    if not result["ok"]:
+        return []
+    interfaces = []
+    for line in result["output"].splitlines():
+        if not line.startswith("default "):
+            continue
+        match = re.search(r"\bdev\s+(eth\d+)\b", line)
+        if match and match.group(1) not in interfaces:
+            interfaces.append(match.group(1))
+    return interfaces
+
+
 def connections_status(projects):
     active_by_iface = {}
     for project in projects:
@@ -510,7 +557,13 @@ def connections_status(projects):
         if iface and iface not in ("unknown", "not configured"):
             active_by_iface.setdefault(iface, []).append(project["title"].replace("UniFi ", ""))
 
-    connections = [connection_status("ISP", active_for=[])]
+    wan_ifaces = wan_interfaces()
+    connections = [
+        connection_status(f"WAN{index}", iface=iface, active_for=active_by_iface.get(iface, []))
+        for index, iface in enumerate(wan_ifaces, 1)
+    ]
+    if not connections:
+        connections = [connection_status("ISP", active_for=[])]
     names = wg_map_names()
     for iface in wireguard_interfaces():
         active_for = active_by_iface.get(iface, [])
@@ -620,7 +673,8 @@ def generated_icon_png(label, size=101):
 
 
 def generate_provider_icons(connections=None):
-    connections = connections or connections_status([project_status(key, config) for key, config in PROJECTS.items()])
+    if connections is None:
+        connections = connections_status([project_status(key, config) for key, config in PROJECTS.items()])
     ISP_ICONS["dir"].mkdir(parents=True, exist_ok=True)
     created = []
     for item in connections:
@@ -631,6 +685,9 @@ def generate_provider_icons(connections=None):
             filename = f"{item['asn']}_101x101.png"
             path = ISP_ICONS["dir"] / filename
             marker = path.with_suffix(path.suffix + ".source")
+            write_provider_aliases(item["asn"], isp, item.get("asname", ""))
+            if path.exists():
+                continue
             ok, _ = download_url(f"https://static.2ip.io/asn_favicons/{item['asn']}.png", path)
             if ok:
                 marker.write_text("2ip\n", encoding="utf-8")
@@ -815,6 +872,9 @@ def download_asset(kind, url, filename):
     else:
         return {"ok": False, "output": "Unknown asset type"}
     ok, output = download_url(url, path)
+    if ok and kind == "provider":
+        marker = path.with_suffix(path.suffix + ".source")
+        marker.write_text("manual\n", encoding="utf-8")
     return {"ok": ok, "output": output}
 
 

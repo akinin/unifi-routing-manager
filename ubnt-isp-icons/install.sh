@@ -16,6 +16,17 @@ installed_name_for() {
   basename "$1" | sed 's/_[0-9][0-9]*x[0-9][0-9]*\.png$//' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/_/g; s/^_*//; s/_*$//'
 }
 
+install_name_alias() {
+  ICON="$1"
+  ALIAS="$2"
+  [ -n "$ALIAS" ] || return 0
+  case "$ALIAS" in
+    *[!a-z0-9_]*) return 0 ;;
+  esac
+  cp "$ICON" "$ISP_DIR/${ALIAS}_101x101.png"
+  log "Installed name alias ${ALIAS}_101x101.png"
+}
+
 uninstall_icons() {
   log "Removing installed ISP icons..."
 
@@ -24,6 +35,11 @@ uninstall_icons() {
     NAME="$(basename "$ICON")"
     SLUG="$(installed_name_for "$ICON")"
     rm -f "$ASN_DIR/$NAME" "$ISP_DIR/${SLUG}_101x101.png"
+    if [ -f "$ICON.aliases" ]; then
+      while IFS= read -r ALIAS; do
+        [ -n "$ALIAS" ] && rm -f "$ISP_DIR/${ALIAS}_101x101.png"
+      done < "$ICON.aliases"
+    fi
   done
 
   log "Done."
@@ -77,17 +93,26 @@ for ICON in "$SRC"/*_101x101.png; do
   SLUG="$(installed_name_for "$ICON")"
 
   cp "$ICON" "$ASN_DIR/$NAME"
-  cp "$ICON" "$ISP_DIR/${SLUG}_101x101.png"
+  install_name_alias "$ICON" "$SLUG"
+  if [ -f "$ICON.aliases" ]; then
+    while IFS= read -r ALIAS; do
+      install_name_alias "$ICON" "$ALIAS"
+    done < "$ICON.aliases"
+  fi
   log "Installed $NAME -> $ASN_DIR/$NAME and $ISP_DIR/${SLUG}_101x101.png"
 done
 
 chmod 644 "$ASN_DIR/"*_101x101.png "$ISP_DIR/"*_101x101.png
 patch_unifi_paths
 
-log "Verifying local URLs with curl:"
+log "Verifying installed files:"
 for ICON in "$SRC"/*_101x101.png; do
   [ -f "$ICON" ] || continue
-  curl -k -I "https://127.0.0.1/app-assets/network/react/images/topology/isp/asn/$(basename "$ICON")" || true
+  NAME="$(basename "$ICON")"
+  [ -s "$ASN_DIR/$NAME" ] || {
+    log "ERROR: missing installed ASN icon $ASN_DIR/$NAME"
+    exit 1
+  }
 done
 
 log "Done."
