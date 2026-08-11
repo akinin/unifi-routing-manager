@@ -15,6 +15,7 @@ const state = {
   connections: null,
   maintenanceLoaded: false,
   notificationsLoaded: false,
+  eventsLoaded: false,
 };
 
 document.documentElement.classList.toggle("standalone", window.matchMedia("(display-mode: standalone)").matches || Boolean(window.navigator.standalone));
@@ -65,6 +66,32 @@ const translations = {
     keepToken: "Leave empty to keep current token",
     testNotification: "Test notification",
     notificationSaved: "Notification settings saved",
+    events: "Events",
+    eventsText: "Outages, recoveries, IP changes and notification delivery.",
+    eventHistory: "Event history",
+    eventHistoryText: "Connection changes and notification delivery status.",
+    allEvents: "All events",
+    outages: "Outages",
+    recoveries: "Recoveries",
+    ipChanges: "IP changes",
+    notificationTests: "Notification tests",
+    unreadOnly: "Unread only",
+    markAllRead: "Mark all read",
+    clearRead: "Clear read",
+    clearReadConfirm: "Delete all read events? Unread events will be kept.",
+    noEvents: "No events match this filter.",
+    unreadEvents: "unread",
+    delivered: "Delivered",
+    deliveryFailed: "Delivery failed",
+    notificationPending: "Sending",
+    notificationDisabled: "Notifications disabled",
+    channelOffline: "Connection went offline",
+    channelOnline: "Connection recovered",
+    externalIpChanged: "External IP changed",
+    notificationTest: "Notification test",
+    eventCenterStarted: "Event center enabled",
+    oldIp: "Old IP",
+    newIp: "New IP",
     telegramTransport: "Telegram transport",
     transportAuto: "WSS with HTTPS fallback",
     telegramWssUrl: "Telegram WSS relay",
@@ -227,6 +254,32 @@ const translations = {
     keepToken: "Оставьте пустым, чтобы сохранить текущий токен",
     testNotification: "Проверить уведомление",
     notificationSaved: "Настройки уведомлений сохранены",
+    events: "События",
+    eventsText: "Сбои, восстановления, смены IP и доставка уведомлений.",
+    eventHistory: "История событий",
+    eventHistoryText: "Изменения подключений и статус доставки уведомлений.",
+    allEvents: "Все события",
+    outages: "Сбои",
+    recoveries: "Восстановления",
+    ipChanges: "Смены IP",
+    notificationTests: "Проверки уведомлений",
+    unreadOnly: "Только непрочитанные",
+    markAllRead: "Прочитать все",
+    clearRead: "Очистить прочитанные",
+    clearReadConfirm: "Удалить все прочитанные события? Непрочитанные останутся.",
+    noEvents: "Для выбранного фильтра событий нет.",
+    unreadEvents: "непрочитанных",
+    delivered: "Доставлено",
+    deliveryFailed: "Ошибка доставки",
+    notificationPending: "Отправляется",
+    notificationDisabled: "Уведомления выключены",
+    channelOffline: "Соединение потеряно",
+    channelOnline: "Соединение восстановлено",
+    externalIpChanged: "Внешний IP изменён",
+    notificationTest: "Проверка уведомления",
+    eventCenterStarted: "Центр событий включён",
+    oldIp: "Старый IP",
+    newIp: "Новый IP",
     telegramTransport: "Транспорт Telegram",
     transportAuto: "WSS с резервным HTTPS",
     telegramWssUrl: "WSS relay Telegram",
@@ -372,6 +425,7 @@ const pageMeta = {
   dns: ["DNS", "dnsText"],
   providers: ["providers", "providersText"],
   health: ["health", "healthText"],
+  events: ["events", "eventsText"],
   logs: ["logs", "logsText"],
   settings: ["settings", "settingsText"],
 };
@@ -391,10 +445,11 @@ function showPage(page) {
     node.classList.toggle("active", active);
   });
   document.querySelectorAll("[data-nav]").forEach((button) => button.classList.toggle("active", button.dataset.nav === page));
-  $("[data-mobile-more]")?.classList.toggle("active", ["providers", "logs", "settings"].includes(page));
+  $("[data-mobile-more]")?.classList.toggle("active", ["providers", "events", "logs", "settings"].includes(page));
   updatePageHeader();
   if (page === "health" && !state.maintenanceLoaded) loadBackups().catch((error) => showToast(error.message));
   if (page === "logs" && !state.logsLoaded) loadLogs().catch((error) => showToast(error.message));
+  if (page === "events") loadEvents().catch((error) => showToast(error.message));
   if (page === "settings") {
     if (!state.filesLoaded) loadEditors().catch((error) => showToast(error.message));
     if (!state.notificationsLoaded) loadNotificationSettings().catch((error) => showToast(error.message));
@@ -402,7 +457,7 @@ function showPage(page) {
 }
 
 function setupNavigationIcons() {
-  const names = { overview: "overview", routing: "route", dns: "dns", providers: "globe", health: "diagnostic", logs: "terminal", settings: "settings" };
+  const names = { overview: "overview", routing: "route", dns: "dns", providers: "globe", health: "diagnostic", events: "bell", logs: "terminal", settings: "settings" };
   document.querySelectorAll("[data-nav-icon]").forEach((node) => { node.innerHTML = icon(names[node.dataset.navIcon]); });
   document.querySelectorAll("[data-mobile-icon]").forEach((node) => { node.innerHTML = icon(names[node.dataset.mobileIcon]); });
   document.querySelectorAll("[data-static-icon]").forEach((node) => { node.innerHTML = icon(node.dataset.staticIcon); });
@@ -444,6 +499,8 @@ const mdiPaths = {
   stop: "M18,18H6V6H18V18Z",
   logout: "M16,13V11H7V8L2,12L7,16V13H16M20,3H8A2,2 0 0,0 6,5V7H8V5H20V19H8V17H6V19A2,2 0 0,0 8,21H20A2,2 0 0,0 22,19V5A2,2 0 0,0 20,3Z",
   terminal: "M13,19V16H21V19H13M8.5,13L2.47,7H6.71L11.67,11.95C12.25,12.54 12.25,13.5 11.67,14.07L6.74,19H2.5L8.5,13Z",
+  bell: "M21,19V20H3V19L5,17V11C5,7.9 7.03,5.17 10,4.29C10,4.19 10,4.1 10,4A2,2 0 0,1 12,2A2,2 0 0,1 14,4C14,4.1 14,4.19 14,4.29C16.97,5.17 19,7.9 19,11V17L21,19M14,21A2,2 0 0,1 10,21H14Z",
+  check: "M9,16.17L4.83,12L3.41,13.41L9,19L21,7L19.59,5.59L9,16.17Z",
 };
 
 const inlineIcons = Object.fromEntries(Object.entries(mdiPaths).map(([name, path]) => [
@@ -824,6 +881,7 @@ async function saveNotificationSettings() {
 async function testNotification() {
   const result = await getJson("/api/notifications/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
   showToast(result.output || t("done"));
+  await loadEvents();
 }
 
 function renderUserIdentity(me) {
@@ -886,6 +944,7 @@ async function refresh() {
     enhanceButtons();
     $("#lastUpdated").textContent = t("updatedNow");
     const optional = [connectionsRequest, monitoringRequest];
+    optional.push(state.page === "events" ? loadEvents() : getJson("/api/events?limit=1", { cache: "no-store" }).then((events) => updateEventCount(events.unread || 0)));
     if (state.page === "logs") optional.push(loadLogs());
     if (state.page === "settings" && !state.filesLoaded) optional.push(loadEditors());
     if (state.page === "settings" && !state.notificationsLoaded) optional.push(loadNotificationSettings());
@@ -919,6 +978,62 @@ function openDownload(kind) {
   $("#downloadUrl").value = "";
   $("#downloadName").value = "";
   $("#downloadModal").hidden = false;
+}
+
+function eventPresentation(item) {
+  const details = item.details || {};
+  if (item.kind === "channel_offline") return { title: t("channelOffline"), description: `${item.source} · ${details.interface || ""}`, icon: "diagnostic" };
+  if (item.kind === "channel_online") return { title: t("channelOnline"), description: `${item.source} · ${details.interface || ""}`, icon: "check" };
+  if (item.kind === "ip_changed") return { title: t("externalIpChanged"), description: `${t("oldIp")}: ${details.oldIp || "—"} · ${t("newIp")}: ${details.newIp || "—"}`, icon: "route" };
+  if (item.kind === "notification_test") return { title: t("notificationTest"), description: item.source || "Telegram", icon: "bell" };
+  if (item.kind === "system_started") return { title: t("eventCenterStarted"), description: item.source || "URM", icon: "bell" };
+  return { title: item.kind || t("events"), description: item.source || "URM", icon: "bell" };
+}
+
+function notificationPresentation(status) {
+  if (status === "sent") return `<span class="event-delivery ok">${icon("check")}${t("delivered")}</span>`;
+  if (status === "failed") return `<span class="event-delivery bad">${icon("diagnostic")}${t("deliveryFailed")}</span>`;
+  if (status === "pending") return `<span class="event-delivery warn">${icon("refresh")}${t("notificationPending")}</span>`;
+  return "";
+}
+
+function updateEventCount(count) {
+  document.querySelectorAll("[data-event-count]").forEach((node) => {
+    node.textContent = count > 99 ? "99+" : String(count || "");
+    node.hidden = !count;
+  });
+}
+
+function renderEvents(data) {
+  const items = data.events || [];
+  updateEventCount(Number(data.unread) || 0);
+  $("#eventSummary").textContent = `${data.total || 0} · ${data.unread || 0} ${t("unreadEvents")}`;
+  $("#eventList").innerHTML = items.length ? items.map((item) => {
+    const view = eventPresentation(item);
+    const severity = ["critical", "warning", "success"].includes(item.severity) ? item.severity : "info";
+    return `<article class="event-item ${item.read ? "read" : "unread"}">
+      <div class="event-kind ${severity}">${icon(view.icon)}</div>
+      <div class="event-copy"><div><strong>${escapeHtml(view.title)}</strong>${item.read ? "" : '<span class="unread-dot"></span>'}</div><p>${escapeHtml(view.description)}</p><small>${escapeHtml(new Date((item.time || 0) * 1000).toLocaleString(state.lang))}</small></div>
+      <div class="event-side">${notificationPresentation(item.notification)}${item.read ? "" : `<button type="button" class="event-read" data-read-event="${escapeHtml(item.id)}" title="${escapeHtml(t("markAllRead"))}">${icon("check")}</button>`}</div>
+    </article>`;
+  }).join("") : `<p class="empty">${t("noEvents")}</p>`;
+  state.eventsLoaded = true;
+}
+
+async function loadEvents() {
+  const kind = $("#eventTypeFilter")?.value || "all";
+  const unread = $("#unreadEventsOnly")?.checked ? "1" : "0";
+  const data = await getJson(`/api/events?kind=${encodeURIComponent(kind)}&unread=${unread}`, { cache: "no-store" });
+  renderEvents(data);
+}
+
+async function updateEvents(action, id = "") {
+  await getJson("/api/events", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, id }),
+  });
+  await loadEvents();
 }
 
 async function loadLogs() {
@@ -1387,6 +1502,8 @@ document.addEventListener("click", async (event) => {
   if (download) openDownload(download.dataset.openDownload);
   const restore = event.target.closest("[data-restore-backup]");
   if (restore) restoreBackup(restore.dataset.restoreBackup).catch((error) => showToast(error.message));
+  const readEvent = event.target.closest("[data-read-event]");
+  if (readEvent) updateEvents("mark_read", readEvent.dataset.readEvent).catch((error) => showToast(error.message));
   if (event.target.closest("[data-close-modal]")) event.target.closest(".modal").hidden = true;
 });
 
@@ -1419,6 +1536,12 @@ $("#notificationForm").addEventListener("submit", (event) => {
   saveNotificationSettings().catch((error) => showToast(error.message));
 });
 $("#testNotificationBtn").addEventListener("click", () => testNotification().catch((error) => showToast(error.message)));
+$("#eventTypeFilter").addEventListener("change", () => loadEvents().catch((error) => showToast(error.message)));
+$("#unreadEventsOnly").addEventListener("change", () => loadEvents().catch((error) => showToast(error.message)));
+$("#markAllEventsRead").addEventListener("click", () => updateEvents("mark_all_read").catch((error) => showToast(error.message)));
+$("#clearReadEvents").addEventListener("click", () => {
+  if (window.confirm(t("clearReadConfirm"))) updateEvents("clear_read").catch((error) => showToast(error.message));
+});
 $("#logoutBtn").addEventListener("click", logout);
 $("#themeBtn").addEventListener("click", () => {
   document.body.classList.toggle("dark");
@@ -1431,6 +1554,7 @@ $("#languageSelect").addEventListener("change", () => {
   applyLanguage();
   if (state.status) renderStatus(state.status);
   if (state.connections) renderConnections(state.connections);
+  if (state.eventsLoaded) loadEvents().catch((error) => showToast(error.message));
 });
 $("#autoRefresh").addEventListener("change", () => {
   clearInterval(state.autoTimer);

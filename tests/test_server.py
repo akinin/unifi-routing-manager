@@ -64,6 +64,28 @@ class BackupTests(unittest.TestCase):
                 server.ROOT, server.BACKUP_DIR, server.CONFIG_BACKUP_PATHS, server.systemctl = original
 
 
+class EventTests(unittest.TestCase):
+    def test_event_lifecycle_and_filters(self):
+        with tempfile.TemporaryDirectory() as directory:
+            original = server.EVENT_FILE
+            try:
+                server.EVENT_FILE = Path(directory) / "events.json"
+                first = server.add_event("channel_offline", "critical", "WAN1", {"status": "offline"}, notification="pending")
+                server.add_event("ip_changed", "warning", "WAN2", {"oldIp": "192.0.2.1", "newIp": "192.0.2.2"})
+                server.update_event_notification(first, {"ok": True, "output": "Delivered"})
+                payload = server.events_payload(kind="channel_offline")
+                self.assertEqual(payload["unread"], 2)
+                self.assertEqual(len(payload["events"]), 1)
+                self.assertEqual(payload["events"][0]["notification"], "sent")
+                self.assertTrue(server.events_action({"action": "mark_read", "id": first})["ok"])
+                self.assertEqual(server.events_payload(unread_only=True)["unread"], 1)
+                self.assertTrue(server.events_action({"action": "mark_all_read"})["ok"])
+                self.assertTrue(server.events_action({"action": "clear_read"})["ok"])
+                self.assertEqual(server.events_payload()["total"], 0)
+            finally:
+                server.EVENT_FILE = original
+
+
 class WebAuthnHelpersTests(unittest.TestCase):
     def test_cbor_decode(self):
         value, offset = server.cbor_decode(bytes.fromhex("a201022001"))

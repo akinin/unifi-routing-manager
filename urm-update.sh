@@ -87,7 +87,7 @@ cp -R "$SOURCE/." "$STAGE_DIR/"
 # grow very large on UDM persistent storage, so keep just a useful recent tail.
 if [ -d "$INSTALL_DIR" ]; then
   for relative in \
-    urm-auth.json urm.env wg-map.conf notification-settings.json monitor-history.json \
+    urm-auth.json urm.env wg-map.conf notification-settings.json monitor-history.json events.json \
     ubnt-cloud/domains.txt ubnt-cloud/networks-manual.txt \
     ubnt-updates/update-domains.txt ubnt-updates/networks-manual.txt; do
     if [ -f "$INSTALL_DIR/$relative" ]; then

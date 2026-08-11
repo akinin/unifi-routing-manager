@@ -32,6 +32,7 @@
         <button class="nav-item" type="button" data-nav="dns"><span data-nav-icon="dns"></span><span>DNS</span></button>
         <button class="nav-item" type="button" data-nav="providers"><span data-nav-icon="providers"></span><span data-i18n="providers">Providers</span></button>
         <button class="nav-item" type="button" data-nav="health"><span data-nav-icon="health"></span><span data-i18n="health">Diagnostics</span></button>
+        <button class="nav-item" type="button" data-nav="events"><span data-nav-icon="events"></span><span data-i18n="events">Events</span><span class="nav-count" data-event-count hidden></span></button>
         <button class="nav-item" type="button" data-nav="logs"><span data-nav-icon="logs"></span><span data-i18n="logs">Logs</span></button>
         <button class="nav-item" type="button" data-nav="settings"><span data-nav-icon="settings"></span><span data-i18n="settings">Settings</span></button>
       </nav>
@@ -214,6 +215,30 @@
       </section>
       </div>
 
+      <div class="page" data-page="events" hidden>
+        <section class="panel events-panel">
+          <div class="panel-head events-head">
+            <div><h2 data-i18n="eventHistory">Event history</h2><p data-i18n="eventHistoryText">Connection changes and notification delivery status.</p></div>
+            <div class="actions">
+              <button id="markAllEventsRead" type="button" data-i18n="markAllRead">Mark all read</button>
+              <button id="clearReadEvents" type="button" class="danger" data-i18n="clearRead">Clear read</button>
+            </div>
+          </div>
+          <div class="event-toolbar">
+            <select id="eventTypeFilter" aria-label="Event type">
+              <option value="all" data-i18n="allEvents">All events</option>
+              <option value="channel_offline" data-i18n="outages">Outages</option>
+              <option value="channel_online" data-i18n="recoveries">Recoveries</option>
+              <option value="ip_changed" data-i18n="ipChanges">IP changes</option>
+              <option value="notification_test" data-i18n="notificationTests">Notification tests</option>
+            </select>
+            <label class="switch-row compact-switch"><input id="unreadEventsOnly" type="checkbox"><span data-i18n="unreadOnly">Unread only</span></label>
+            <span id="eventSummary" class="event-summary"></span>
+          </div>
+          <div class="event-list" id="eventList"><p class="empty" data-i18n="loading">Loading...</p></div>
+        </section>
+      </div>
+
       <div class="page" data-page="logs" hidden>
       <section class="panel" id="logs">
         <div class="panel-head">
@@ -238,6 +263,7 @@
 
     <div class="mobile-more-menu" id="mobileMoreMenu" hidden>
       <button type="button" data-nav="providers"><span data-mobile-icon="providers"></span><span data-i18n="providers">Providers</span></button>
+      <button type="button" data-nav="events"><span data-mobile-icon="events"></span><span data-i18n="events">Events</span><span class="nav-count" data-event-count hidden></span></button>
       <button type="button" data-nav="logs"><span data-mobile-icon="logs"></span><span data-i18n="logs">Logs</span></button>
       <button type="button" data-nav="settings"><span data-mobile-icon="settings"></span><span data-i18n="settings">Settings</span></button>
       <button type="button" data-mobile-profile><span data-static-icon="profile"></span><span data-i18n="profile">Profile</span></button>

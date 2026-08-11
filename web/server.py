@@ -88,8 +88,11 @@ BACKUP_DIR = ROOT / "backups"
 BACKUP_LIMIT = 20
 MONITOR_FILE = ROOT / "monitor-history.json"
 NOTIFICATION_FILE = ROOT / "notification-settings.json"
+EVENT_FILE = ROOT / "events.json"
 MONITOR_LOCK = threading.Lock()
+EVENT_LOCK = threading.Lock()
 MONITOR_INTERVAL = 60
+EVENT_LIMIT = 500
 WEBAUTHN_CHALLENGES = {}
 WEBAUTHN_LOCK = threading.Lock()
 LOGIN_ATTEMPTS = {}
@@ -1012,10 +1015,82 @@ def telegram_send_wss(url, relay_secret, bot_token, chat_id, message):
             return True
 
 
-def send_notification(message):
+def add_event(kind, severity, source, details=None, notification="not_requested"):
+    event = {
+        "id": f"{int(time.time() * 1000)}-{secrets.token_hex(3)}",
+        "time": int(time.time()),
+        "kind": str(kind),
+        "severity": severity if severity in ("info", "warning", "critical", "success") else "info",
+        "source": str(source or "URM")[:120],
+        "details": details if isinstance(details, dict) else {},
+        "read": False,
+        "notification": notification,
+    }
+    with EVENT_LOCK:
+        data = read_json(EVENT_FILE, {"events": []})
+        events = data.get("events") if isinstance(data.get("events"), list) else []
+        events.append(event)
+        write_json(EVENT_FILE, {"events": events[-EVENT_LIMIT:], "updatedAt": event["time"]})
+    return event["id"]
+
+
+def update_event_notification(event_id, result):
+    if not event_id:
+        return
+    with EVENT_LOCK:
+        data = read_json(EVENT_FILE, {"events": []})
+        changed = False
+        for event in data.get("events", []):
+            if event.get("id") == event_id:
+                event["notification"] = "sent" if result.get("ok") else "failed"
+                event["notificationOutput"] = str(result.get("output") or "")[:240]
+                changed = True
+                break
+        if changed:
+            data["updatedAt"] = int(time.time())
+            write_json(EVENT_FILE, data)
+
+
+def events_payload(kind="all", unread_only=False, limit=200):
+    data = read_json(EVENT_FILE, {"events": []})
+    all_events = data.get("events") if isinstance(data.get("events"), list) else []
+    unread = sum(1 for event in all_events if not event.get("read"))
+    events = list(reversed(all_events))
+    if kind != "all":
+        events = [event for event in events if event.get("kind") == kind]
+    if unread_only:
+        events = [event for event in events if not event.get("read")]
+    return {"events": events[:max(1, min(int(limit), 500))], "unread": unread, "total": len(all_events), "updatedAt": data.get("updatedAt", 0)}
+
+
+def events_action(payload):
+    action = str(payload.get("action") or "")
+    event_id = str(payload.get("id") or "")
+    with EVENT_LOCK:
+        data = read_json(EVENT_FILE, {"events": []})
+        events = data.get("events") if isinstance(data.get("events"), list) else []
+        if action == "mark_read":
+            for event in events:
+                if event.get("id") == event_id:
+                    event["read"] = True
+                    break
+        elif action == "mark_all_read":
+            for event in events:
+                event["read"] = True
+        elif action == "clear_read":
+            events = [event for event in events if not event.get("read")]
+        else:
+            return {"ok": False, "output": "Invalid event action"}
+        write_json(EVENT_FILE, {"events": events[-EVENT_LIMIT:], "updatedAt": int(time.time())})
+    return {"ok": True, "output": "Events updated"}
+
+
+def send_notification(message, event_id=None):
     settings = notification_settings(include_secret=True)
     if not settings.get("enabled"):
-        return {"ok": False, "output": "Notifications are disabled"}
+        result = {"ok": False, "output": "Notifications are disabled"}
+        update_event_notification(event_id, result)
+        return result
     results = []
     targets = 0
     token, chat_id = settings.get("telegramBotToken"), settings.get("telegramChatId")
@@ -1046,12 +1121,14 @@ def send_notification(message):
                 results.append(200 <= response.status < 300)
         except OSError:
             results.append(False)
-    return {"ok": bool(targets and all(results)), "output": f"Delivered to {sum(results)}/{targets} targets" if targets else "No notification target configured"}
+    result = {"ok": bool(targets and all(results)), "output": f"Delivered to {sum(results)}/{targets} targets" if targets else "No notification target configured"}
+    update_event_notification(event_id, result)
+    return result
 
 
 def record_monitoring(connections):
     now = int(time.time())
-    messages = []
+    changes = []
     with MONITOR_LOCK:
         data = read_json(MONITOR_FILE, {"connections": {}})
         history = data.setdefault("connections", {})
@@ -1066,13 +1143,27 @@ def record_monitoring(connections):
             history[key] = samples[-120:]
             if previous:
                 if previous.get("online") != sample["online"]:
-                    messages.append(f"URM: {item.get('label', key)} is {'online' if sample['online'] else 'offline'}")
+                    online = sample["online"]
+                    changes.append({
+                        "kind": "channel_online" if online else "channel_offline",
+                        "severity": "success" if online else "critical",
+                        "source": item.get("label", key),
+                        "details": {"connection": item.get("label", key), "interface": key, "status": "online" if online else "offline"},
+                        "message": f"URM: {item.get('label', key)} is {'online' if online else 'offline'}",
+                    })
                 if sample["online"] and previous.get("ip") not in (None, "N/A") and previous.get("ip") != sample["ip"]:
-                    messages.append(f"URM: {item.get('label', key)} external IP changed: {previous.get('ip')} → {sample['ip']}")
+                    changes.append({
+                        "kind": "ip_changed",
+                        "severity": "warning",
+                        "source": item.get("label", key),
+                        "details": {"connection": item.get("label", key), "interface": key, "oldIp": previous.get("ip"), "newIp": sample["ip"]},
+                        "message": f"URM: {item.get('label', key)} external IP changed: {previous.get('ip')} → {sample['ip']}",
+                    })
         data["updatedAt"] = now
         write_json(MONITOR_FILE, data)
-    for message in messages:
-        threading.Thread(target=send_notification, args=(message,), daemon=True).start()
+    for change in changes:
+        event_id = add_event(change["kind"], change["severity"], change["source"], change["details"], notification="pending")
+        threading.Thread(target=send_notification, args=(change["message"], event_id), daemon=True).start()
 
 
 def monitored_connections():
@@ -1739,6 +1830,16 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/notifications":
             self.send_json(notification_settings())
             return
+        if parsed.path == "/api/events":
+            query = parse_qs(parsed.query)
+            kind = query.get("kind", ["all"])[0]
+            unread_only = query.get("unread", ["0"])[0] == "1"
+            try:
+                limit = int(query.get("limit", ["200"])[0])
+            except ValueError:
+                limit = 200
+            self.send_json(events_payload(kind=kind, unread_only=unread_only, limit=limit))
+            return
         if parsed.path == "/api/files":
             self.send_json(editable_payload())
             return
@@ -1794,7 +1895,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({"ok": False, "output": "HTTPS is required"}, 403)
             return
         parsed = urlparse(self.path)
-        if parsed.path not in ("/api/action", "/api/files", "/api/files/validate", "/api/diagnostics", "/api/backups/create", "/api/backups/restore", "/api/notifications", "/api/notifications/test", "/api/auth/login", "/api/auth/logout", "/api/auth/passkey/options", "/api/auth/passkey/verify", "/api/auth/passkey/register/options", "/api/auth/passkey/register", "/api/auth/avatar", "/api/auth/logo", "/api/auth/profile", "/api/assets/download"):
+        if parsed.path not in ("/api/action", "/api/files", "/api/files/validate", "/api/diagnostics", "/api/backups/create", "/api/backups/restore", "/api/notifications", "/api/notifications/test", "/api/events", "/api/auth/login", "/api/auth/logout", "/api/auth/passkey/options", "/api/auth/passkey/verify", "/api/auth/passkey/register/options", "/api/auth/passkey/register", "/api/auth/avatar", "/api/auth/logo", "/api/auth/profile", "/api/assets/download"):
             self.send_json({"ok": False, "output": "Not found"}, 404)
             return
         origin = self.headers.get("Origin", "")
@@ -2007,7 +2108,12 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json(result, 200 if result["ok"] else 400)
             return
         if parsed.path == "/api/notifications/test":
-            result = send_notification("URM: test notification")
+            event_id = add_event("notification_test", "info", "Telegram", {"test": True}, notification="pending")
+            result = send_notification("URM: test notification", event_id)
+            self.send_json(result, 200 if result["ok"] else 400)
+            return
+        if parsed.path == "/api/events":
+            result = events_action(payload)
             self.send_json(result, 200 if result["ok"] else 400)
             return
         if parsed.path == "/api/files":
@@ -2034,6 +2140,8 @@ def main():
         print(f"ERROR: {error}", file=sys.stderr)
         sys.exit(1)
 
+    if not EVENT_FILE.exists():
+        add_event("system_started", "info", "URM", {"version": "events-v1"})
     threading.Thread(target=monitor_worker, daemon=True, name="urm-monitor").start()
     try:
         server = ThreadingHTTPServer((HOST, PORT), Handler)
