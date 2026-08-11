@@ -1210,7 +1210,7 @@ body.dark .title-row .icon.brand-mark {
 }
 
 .topbar {
-  min-height: 82px;
+  min-height: 68px;
   margin-bottom: 20px;
   padding-bottom: 18px;
   border-bottom: 1px solid var(--line-soft);
@@ -1218,16 +1218,6 @@ body.dark .title-row .icon.brand-mark {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-}
-
-.eyebrow {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--blue);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: .09em;
-  text-transform: uppercase;
 }
 
 .topbar h1 {
