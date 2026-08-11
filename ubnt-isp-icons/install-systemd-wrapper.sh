@@ -15,7 +15,12 @@ log() {
 
 log "=== start UBNT ISP icons install wrapper ==="
 
-# Ждём до 5 минут появления UniFi web assets.
+if ! ls "$BASE"/*_101x101.png >/dev/null 2>&1; then
+  log "No custom ISP icons configured; nothing to install."
+  exit 0
+fi
+
+# Wait up to five minutes for the UniFi Network web assets.
 i=0
 while [ "$i" -lt 60 ]; do
   if [ -d "$APP/react/js" ] && ls "$APP"/react/js/swai.*.js >/dev/null 2>&1; then

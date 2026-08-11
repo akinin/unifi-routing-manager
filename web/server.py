@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, urlparse
 
 APP_DIR = Path(__file__).resolve().parent
 PROJECT_HOME = APP_DIR.parent
-ROOT = Path(os.environ.get("UNIFI_ROUTING_ROOT", "/persistent")).resolve()
+ROOT = Path(os.environ.get("UNIFI_ROUTING_ROOT", "/persistent/unifi-routing-manager")).resolve()
 HOST = os.environ.get("UNIFI_WEB_HOST", "0.0.0.0")
 PORT = int(os.environ.get("UNIFI_WEB_PORT", "8090"))
 
@@ -34,7 +34,7 @@ PROJECTS = {
         "log": "ubnt-cloud-routes.log",
         "files": {
             "domains": "domains.txt",
-            "networks": "networks.txt",
+            "networks": "networks-manual.txt",
             "addresses": "addresses.txt",
         },
     },
@@ -81,6 +81,12 @@ EDITABLE_FILES = {
     "updates.networks": ROOT / "ubnt-updates" / "networks-manual.txt",
     "wg.map": ROOT / "wg-map.conf",
 }
+VIEW_ONLY_FILES = {
+    "dnscrypt.domains": {
+        "path": ROOT / "ubnt-dnscrypt" / "domains.txt",
+        "description": "Generated from the Cloud and Updates domain lists. Edit those source lists to change DNSCrypt forwarding.",
+    },
+}
 
 
 def read_text(path, default=""):
@@ -102,9 +108,9 @@ def read_json(path, default=None):
         return default if default is not None else {}
 
 
-def hash_password(password, salt=None):
+def hash_password(password, salt=None, iterations=210000):
     salt = salt or secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("ascii"), 120000)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("ascii"), iterations)
     return salt, base64.b64encode(digest).decode("ascii")
 
 
@@ -112,17 +118,10 @@ def ensure_auth_config():
     data = read_json(AUTH_FILE, {})
     if data.get("username") and data.get("passwordHash") and data.get("sessionSecret"):
         return data
-    salt, digest = hash_password("admin")
-    data = {
-        "name": "Administrator",
-        "username": "admin",
-        "passwordSalt": salt,
-        "passwordHash": digest,
-        "sessionSecret": secrets.token_hex(32),
-        "avatar": "",
-    }
-    write_json(AUTH_FILE, data)
-    return data
+    raise RuntimeError(
+        f"Missing or invalid authentication config: {AUTH_FILE}. "
+        "Run the installer interactively to create it."
+    )
 
 
 def verify_password(password, config):
@@ -130,8 +129,39 @@ def verify_password(password, config):
     expected = config.get("passwordHash", "")
     if not salt or not expected:
         return False
-    _, digest = hash_password(password, salt)
+    # Existing installations used 120000 iterations without recording the value.
+    iterations = int(config.get("passwordIterations", 120000))
+    _, digest = hash_password(password, salt, iterations)
     return hmac.compare_digest(digest, expected)
+
+
+def update_auth_credentials(payload):
+    config = ensure_auth_config()
+    current_password = str(payload.get("currentPassword", ""))
+    username = str(payload.get("username", "")).strip()
+    new_password = str(payload.get("newPassword", ""))
+
+    if not verify_password(current_password, config):
+        return False, "Current password is incorrect", None
+    if not username or len(username) > 64 or re.search(r"[\s:]", username):
+        return False, "Login must be 1-64 characters without spaces or colons", None
+    if new_password and len(new_password) < 8:
+        return False, "New password must contain at least 8 characters", None
+    if username == config.get("username") and not new_password:
+        return False, "No account changes were provided", None
+
+    updated = dict(config)
+    updated["username"] = username
+    if new_password:
+        salt, digest = hash_password(new_password)
+        updated["passwordSalt"] = salt
+        updated["passwordHash"] = digest
+        updated["passwordIterations"] = 210000
+
+    updated["sessionSecret"] = secrets.token_hex(32)
+    write_json(AUTH_FILE, updated)
+    os.chmod(AUTH_FILE, 0o600)
+    return True, "Login and password settings updated", updated
 
 
 def make_session(username):
@@ -171,6 +201,38 @@ def avatar_url(config=None):
     config = config or ensure_auth_config()
     avatar = config.get("avatar") or ""
     return f"/api/avatar/{Path(avatar).name}" if avatar else ""
+
+
+def brand_logo_url(config=None):
+    config = config or ensure_auth_config()
+    logo = config.get("logo") or ""
+    if not logo:
+        return ""
+    path = Path(logo)
+    if path.parent != AVATAR_DIR or path.suffix.lower() not in (".png", ".jpg", ".jpeg"):
+        return ""
+    try:
+        version = path.stat().st_mtime_ns
+    except OSError:
+        return ""
+    return f"/api/brand/{path.name}?v={version}"
+
+
+def decode_uploaded_image(payload, max_size=512 * 1024):
+    data_url = str(payload.get("data", ""))
+    if "," not in data_url:
+        return None, "", "Invalid image"
+    try:
+        raw = base64.b64decode(data_url.split(",", 1)[1], validate=True)
+    except (ValueError, TypeError):
+        return None, "", "Invalid image data"
+    if len(raw) > max_size:
+        return None, "", "Image is too large"
+    if raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        return raw, ".png", ""
+    if raw.startswith(b"\xff\xd8\xff"):
+        return raw, ".jpg", ""
+    return None, "", "Only PNG and JPEG images are supported"
 
 
 def safe_asset_name(filename, allowed=(".png", ".svg", ".ico", ".jpg", ".jpeg")):
@@ -327,7 +389,7 @@ def slugify(value):
 
 def wg_map_names():
     names = {}
-    for path in (ROOT / "wg-map.conf", ROOT / "ubnt-cloud" / "wg-map.conf", ROOT / "ubnt-updates" / "wg-map.conf"):
+    for path in (ROOT / "wg-map.conf",):
         for line in read_text(path, "").splitlines():
             line = line.strip()
             if not line or line.startswith("#"):
@@ -704,6 +766,18 @@ def editable_payload():
             "path": str(path),
             "exists": path.exists(),
             "content": read_text(path, ""),
+            "readOnly": False,
+            "description": "",
+        }
+    for key, spec in VIEW_ONLY_FILES.items():
+        path = spec["path"]
+        files[key] = {
+            "key": key,
+            "path": str(path),
+            "exists": path.exists(),
+            "content": read_text(path, ""),
+            "readOnly": True,
+            "description": spec.get("description", ""),
         }
     return {"files": files}
 
@@ -805,6 +879,7 @@ def action_command(action):
         ],
         "icons.install": [["sh", str(ISP_ICONS["script"])]],
         "icons.uninstall": [["sh", str(ISP_ICONS["script"]), "uninstall"]],
+        "system.update": [["systemctl", "--no-block", "start", "unifi-routing-update.service"]],
     }
     return commands.get(action)
 
@@ -866,7 +941,24 @@ class Handler(SimpleHTTPRequestHandler):
                 "name": config.get("name", ""),
                 "username": config.get("username", ""),
                 "avatar": avatar_url(config),
+                "logo": brand_logo_url(config),
             })
+            return
+        if parsed.path.startswith("/api/brand/"):
+            config = ensure_auth_config()
+            configured = Path(config.get("logo") or "")
+            filename = safe_asset_name(Path(parsed.path).name, allowed=(".png", ".jpg", ".jpeg"))
+            path = configured if filename and configured.parent == AVATAR_DIR and configured.name == filename else None
+            if not path or not path.exists():
+                self.send_error(404)
+                return
+            body = path.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg" if path.suffix.lower() in (".jpg", ".jpeg") else "image/png")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
             return
         if parsed.path.startswith("/api/avatar/"):
             filename = safe_asset_name(Path(parsed.path).name, allowed=(".png", ".jpg", ".jpeg"))
@@ -936,7 +1028,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path not in ("/api/action", "/api/files", "/api/auth/login", "/api/auth/logout", "/api/auth/avatar", "/api/assets/download"):
+        if parsed.path not in ("/api/action", "/api/files", "/api/auth/login", "/api/auth/logout", "/api/auth/avatar", "/api/auth/logo", "/api/auth/profile", "/api/assets/download"):
             self.send_json({"ok": False, "output": "Not found"}, 404)
             return
         length = int(self.headers.get("Content-Length", "0"))
@@ -993,6 +1085,44 @@ class Handler(SimpleHTTPRequestHandler):
             write_json(AUTH_FILE, config)
             self.send_json({"ok": True, "avatar": avatar_url(config)})
             return
+        if parsed.path == "/api/auth/logo":
+            raw, suffix, error = decode_uploaded_image(payload)
+            if error:
+                self.send_json({"ok": False, "output": error}, 400)
+                return
+            AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+            path = AVATAR_DIR / f"brand-logo{suffix}"
+            config = ensure_auth_config()
+            previous = Path(config.get("logo") or "")
+            path.write_bytes(raw)
+            if previous != path and previous.parent == AVATAR_DIR and previous.exists():
+                previous.unlink()
+            config["logo"] = str(path)
+            write_json(AUTH_FILE, config)
+            os.chmod(AUTH_FILE, 0o600)
+            self.send_json({"ok": True, "logo": brand_logo_url(config)})
+            return
+        if parsed.path == "/api/auth/profile":
+            ok, output, config = update_auth_credentials(payload)
+            if not ok:
+                self.send_json({"ok": False, "output": output}, 400)
+                return
+            session = make_session(config["username"])
+            body = json.dumps({
+                "ok": True,
+                "output": output,
+                "name": config.get("name", ""),
+                "username": config.get("username", ""),
+                "avatar": avatar_url(config),
+            }, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Set-Cookie", f"urm_session={session}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_TTL}")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if parsed.path == "/api/assets/download":
             self.send_json(download_asset(payload.get("kind", ""), payload.get("url", ""), payload.get("filename", "")))
             return
@@ -1003,6 +1133,12 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main():
+    try:
+        ensure_auth_config()
+    except RuntimeError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        sys.exit(1)
+
     try:
         server = ThreadingHTTPServer((HOST, PORT), Handler)
     except OSError as error:

@@ -6,6 +6,7 @@ const state = {
   downloadKind: "",
   autoTimer: null,
   lang: "en",
+  me: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -29,6 +30,10 @@ const translations = {
     forwardingRules: "Forwarding rules",
     clearDnsCache: "Clear DNS cache",
     clearDnsCacheConfirm: "Clear the DNS cache on this UDM?",
+    updateProject: "Update URM",
+    updateProjectConfirm: "Update UniFi Routing Manager from GitHub now? The Web UI will restart.",
+    updateStarted: "Update started. Waiting for the Web UI to restart...",
+    updateTimeout: "The updater started, but the Web UI did not return in time.",
     localIcon: "Local icon",
     icons: "Icons",
     lightTheme: "Light theme",
@@ -36,10 +41,90 @@ const translations = {
     edit: "Edit",
     noEntries: "No entries",
     noDomains: "No domains",
+    seconds15: "15 sec",
+    seconds30: "30 sec",
+    minute1: "1 min",
+    minutes5: "5 min",
+    language: "Language",
+    changeIcon: "Change URM icon",
+    generatedDomains: "Generated root domains",
+    viewGeneratedDomains: "View generated DNSCrypt domains",
+    addProvider: "Add provider",
+    addFlag: "Add flag",
+    editor: "Editor",
+    editorText: "Manual routing lists and WireGuard map.",
+    cloudDomains: "Cloud domains",
+    cloudNetworks: "Cloud networks",
+    updatesDomains: "Updates domains",
+    updatesNetworks: "Updates networks",
+    dnscryptGeneratedDomains: "DNSCrypt generated domains",
+    dnscryptGeneratedDescription: "Generated from the Cloud and Updates domain lists. Edit those source lists to change DNSCrypt forwarding.",
+    wireGuardMap: "WireGuard map",
+    save: "Save",
+    close: "Close",
+    upload: "Upload",
+    logs: "Logs",
+    logsText: "Latest entries from local project logs.",
+    expandLogs: "Expand logs",
+    collapseLogs: "Collapse logs",
+    signIn: "Sign in",
+    login: "Login",
+    password: "Password",
+    profile: "Profile",
+    avatar: "Avatar",
+    uploadAvatar: "Upload avatar",
+    chooseImage: "Choose image",
+    noFileSelected: "No file selected",
+    account: "Account",
+    currentPassword: "Current password",
+    newPassword: "New password",
+    confirmPassword: "Confirm new password",
+    requiredToSave: "Required to save",
+    leaveEmptyPassword: "Leave empty to keep current",
+    repeatPassword: "Repeat new password",
+    saveAccount: "Save account",
+    logout: "Logout",
+    connection: "Connection",
+    country: "Country",
+    provider: "Provider",
+    networks: "Networks",
+    resolvedAddresses: "Resolved IP addresses",
+    noConnectionData: "No connection data.",
+    noRecentActivity: "No recent activity",
+    noIcons: "No icons",
+    noLogEntries: "No log entries.",
+    addCountryFlag: "Add country flag",
+    addProviderIcon: "Add provider icon",
+    running: "Running",
+    done: "Done",
+    failed: "Failed",
+    saved: "Saved",
+    uploaded: "Uploaded",
+    avatarUpdated: "Avatar updated",
+    logoUpdated: "URM icon updated",
+    accountUpdated: "Account updated",
+    logoTypeError: "URM icon must be PNG or JPG",
+    logoSizeError: "URM icon must be smaller than 512 KB",
+    avatarTypeError: "Avatar must be PNG or JPG",
+    avatarSizeError: "Avatar must be smaller than 512 KB",
+    passwordMismatch: "New passwords do not match",
+    active: "Active",
+    inactive: "Inactive",
+    enabled: "Enabled",
+    disabled: "Disabled",
+    configured: "Configured",
+    notConfigured: "Not configured",
+    unknown: "Unknown",
+    unavailable: "Unavailable",
+    error: "Error",
   },
   ru: {
     clearDnsCache: "\u041e\u0447\u0438\u0441\u0442\u0438\u0442\u044c DNS-\u043a\u044d\u0448",
     clearDnsCacheConfirm: "\u041e\u0447\u0438\u0441\u0442\u0438\u0442\u044c DNS-\u043a\u044d\u0448 \u043d\u0430 \u044d\u0442\u043e\u0439 UDM?",
+    updateProject: "\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u044c URM",
+    updateProjectConfirm: "\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u044c UniFi Routing Manager \u0438\u0437 GitHub? Web-\u0438\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441 \u0431\u0443\u0434\u0435\u0442 \u043f\u0435\u0440\u0435\u0437\u0430\u043f\u0443\u0449\u0435\u043d.",
+    updateStarted: "\u041e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435 \u0437\u0430\u043f\u0443\u0449\u0435\u043d\u043e. \u0416\u0434\u0451\u043c \u043f\u0435\u0440\u0435\u0437\u0430\u043f\u0443\u0441\u043a Web UI...",
+    updateTimeout: "\u041e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435 \u0437\u0430\u043f\u0443\u0449\u0435\u043d\u043e, \u043d\u043e Web UI \u043d\u0435 \u0432\u0435\u0440\u043d\u0443\u043b\u0441\u044f \u0437\u0430 \u043e\u0442\u0432\u0435\u0434\u0451\u043d\u043d\u043e\u0435 \u0432\u0440\u0435\u043c\u044f.",
     refresh: "Обновить",
     autoOff: "Авто выкл.",
     connections: "Подключения",
@@ -53,8 +138,8 @@ const translations = {
     rules: "Правила",
     entries: "Записи",
     domains: "Домены",
-    dnsRoute: "DNS route",
-    forwardingRules: "Правила forwarding",
+    dnsRoute: "DNS-маршрут",
+    forwardingRules: "Правила перенаправления",
     localIcon: "Локальные иконки",
     icons: "Иконки",
     lightTheme: "Светлая тема",
@@ -62,6 +147,82 @@ const translations = {
     edit: "Редактировать",
     noEntries: "Нет записей",
     noDomains: "Нет доменов",
+    seconds15: "15 сек",
+    seconds30: "30 сек",
+    minute1: "1 мин",
+    minutes5: "5 мин",
+    language: "Язык",
+    changeIcon: "Изменить иконку URM",
+    generatedDomains: "Сгенерированные корневые домены",
+    viewGeneratedDomains: "Посмотреть сгенерированные домены DNSCrypt",
+    addProvider: "Добавить провайдера",
+    addFlag: "Добавить флаг",
+    editor: "Редактор",
+    editorText: "Ручные списки маршрутизации и карта WireGuard.",
+    cloudDomains: "Домены облака UniFi",
+    cloudNetworks: "Сети облака UniFi",
+    updatesDomains: "Домены обновлений",
+    updatesNetworks: "Сети обновлений",
+    dnscryptGeneratedDomains: "Сгенерированные домены DNSCrypt",
+    dnscryptGeneratedDescription: "Формируется из списков доменов облака UniFi и обновлений. Для изменения перенаправления DNSCrypt редактируйте исходные списки.",
+    wireGuardMap: "Карта WireGuard",
+    save: "Сохранить",
+    close: "Закрыть",
+    upload: "Загрузить",
+    logs: "Журналы",
+    logsText: "Последние записи из локальных журналов проекта.",
+    expandLogs: "Развернуть журналы",
+    collapseLogs: "Свернуть журналы",
+    signIn: "Войти",
+    login: "Логин",
+    password: "Пароль",
+    profile: "Профиль",
+    avatar: "Аватар",
+    uploadAvatar: "Загрузить аватар",
+    chooseImage: "Выбрать изображение",
+    noFileSelected: "Файл не выбран",
+    account: "Учётная запись",
+    currentPassword: "Текущий пароль",
+    newPassword: "Новый пароль",
+    confirmPassword: "Подтвердите новый пароль",
+    requiredToSave: "Требуется для сохранения",
+    leaveEmptyPassword: "Оставьте пустым, чтобы не менять",
+    repeatPassword: "Повторите новый пароль",
+    saveAccount: "Сохранить учётную запись",
+    logout: "Выйти",
+    connection: "Подключение",
+    country: "Страна",
+    provider: "Провайдер",
+    networks: "Сети",
+    resolvedAddresses: "Разрешённые IP-адреса",
+    noConnectionData: "Нет данных о подключениях.",
+    noRecentActivity: "Нет недавней активности",
+    noIcons: "Нет иконок",
+    noLogEntries: "В журнале нет записей.",
+    addCountryFlag: "Добавить флаг страны",
+    addProviderIcon: "Добавить иконку провайдера",
+    running: "Выполняется",
+    done: "Готово",
+    failed: "Ошибка",
+    saved: "Сохранено",
+    uploaded: "Загружено",
+    avatarUpdated: "Аватар обновлён",
+    logoUpdated: "Иконка URM обновлена",
+    accountUpdated: "Учётная запись обновлена",
+    logoTypeError: "Иконка URM должна быть в формате PNG или JPG",
+    logoSizeError: "Размер иконки URM не должен превышать 512 КБ",
+    avatarTypeError: "Аватар должен быть в формате PNG или JPG",
+    avatarSizeError: "Размер аватара не должен превышать 512 КБ",
+    passwordMismatch: "Новые пароли не совпадают",
+    active: "Активен",
+    inactive: "Неактивен",
+    enabled: "Включён",
+    disabled: "Отключён",
+    configured: "Настроен",
+    notConfigured: "Не настроено",
+    unknown: "Неизвестно",
+    unavailable: "Недоступно",
+    error: "Ошибка",
   },
 };
 
@@ -79,6 +240,14 @@ function applyLanguage() {
   document.documentElement.lang = state.lang;
   document.querySelectorAll("[data-i18n]").forEach((node) => {
     node.textContent = t(node.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((node) => {
+    node.placeholder = t(node.dataset.i18nPlaceholder);
+  });
+  document.querySelectorAll("[data-i18n-title]").forEach((node) => {
+    const label = t(node.dataset.i18nTitle);
+    node.title = label;
+    node.setAttribute("aria-label", label);
   });
   const languageSelect = $("#languageSelect");
   if (languageSelect) languageSelect.value = state.lang;
@@ -144,12 +313,29 @@ function actionButton(action, label, iconName, options = {}) {
 }
 
 const editorLabels = {
-  "cloud.domains": "Cloud domains",
-  "cloud.networks": "Cloud manual networks",
-  "updates.domains": "Updates domains",
-  "updates.networks": "Updates manual networks",
-  "wg.map": "WireGuard map",
+  "cloud.domains": "cloudDomains",
+  "cloud.networks": "cloudNetworks",
+  "updates.domains": "updatesDomains",
+  "updates.networks": "updatesNetworks",
+  "dnscrypt.domains": "dnscryptGeneratedDomains",
+  "wg.map": "wireGuardMap",
 };
+
+function localizedStatus(value) {
+  const key = {
+    active: "active",
+    inactive: "inactive",
+    enabled: "enabled",
+    disabled: "disabled",
+    configured: "configured",
+    "not configured": "notConfigured",
+    unknown: "unknown",
+    unavailable: "unavailable",
+    failed: "failed",
+    error: "error",
+  }[String(value || "unknown").toLowerCase()];
+  return key ? t(key) : String(value || t("unknown"));
+}
 
 function badge(value) {
   const text = String(value || "unknown");
@@ -157,7 +343,7 @@ function badge(value) {
   if (["active", "enabled", "configured"].includes(text.toLowerCase())) tone = "ok";
   if (["inactive", "disabled", "unknown", "not configured", "unavailable"].includes(text.toLowerCase())) tone = "warn";
   if (["failed", "error"].includes(text)) tone = "bad";
-  return `<span class="badge ${tone}"><span class="badge-dot"></span><span>${escapeHtml(text)}</span></span>`;
+  return `<span class="badge ${tone}"><span class="badge-dot"></span><span>${escapeHtml(localizedStatus(text))}</span></span>`;
 }
 
 function escapeHtml(value) {
@@ -188,10 +374,10 @@ function renderConnections(data) {
   $("#connectionsList").innerHTML = connections.length
     ? `
       <div class="connection header">
-        <div>Connection</div>
+        <div>${t("connection")}</div>
         <div>IP</div>
-        <div>Country</div>
-        <div>Provider</div>
+        <div>${t("country")}</div>
+        <div>${t("provider")}</div>
       </div>
       ${connections
         .map((item) => {
@@ -216,14 +402,14 @@ function renderConnections(data) {
           `;
         })
         .join("")}`
-    : `<p class="empty">No connection data.</p>`;
+    : `<p class="empty">${t("noConnectionData")}</p>`;
 }
 
 function readableFileLabel(label) {
   return {
-    domains: "Domains",
-    networks: "Networks",
-    addresses: "Resolved IP addresses",
+    domains: t("domains"),
+    networks: t("networks"),
+    addresses: t("resolvedAddresses"),
   }[label] || label;
 }
 
@@ -236,29 +422,29 @@ function editorKeyFor(projectKey, label) {
 }
 
 function eventLine(event, fallback) {
-  if (!event) return escapeHtml(fallback || "No recent activity");
+  if (!event) return escapeHtml(fallback || t("noRecentActivity"));
   const time = event.time ? `<span>${escapeHtml(event.time)}</span>` : "";
-  return `${escapeHtml(event.message || fallback || "No recent activity")}${time}`;
+  return `${escapeHtml(event.message || fallback || t("noRecentActivity"))}${time}`;
 }
 
 function eventTime(event, fallback) {
   if (event?.time) return escapeHtml(event.time);
   const text = String(fallback || "");
   const match = text.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
-  return match ? escapeHtml(match[0]) : "No recent activity";
+  return match ? escapeHtml(match[0]) : t("noRecentActivity");
 }
 
 function compactEvent(label, event, fallback) {
   const time = eventTime(event, fallback);
   const safeLabel = escapeHtml(label || "");
-  if (time === "No recent activity") return safeLabel || time;
+  if (time === t("noRecentActivity")) return safeLabel || time;
   return safeLabel ? `${safeLabel} - ${time}` : time;
 }
 
 function statusDot(value) {
   const text = String(value || "").toLowerCase();
   const ok = ["active", "enabled", "configured"].includes(text) || Number(value) > 0;
-  return `<span class="status-dot ${ok ? "ok" : "bad"}" title="${escapeHtml(String(value || "unknown"))}"></span>`;
+  return `<span class="status-dot ${ok ? "ok" : "bad"}" title="${escapeHtml(localizedStatus(value))}"></span>`;
 }
 
 function isActiveState(value) {
@@ -280,14 +466,14 @@ function renderProject(project) {
         : `<p>${t("noEntries")}</p>`;
       const editorKey = editorKeyFor(project.key, label);
       const editButton = editorKey ? `<button class="icon-button edit-button" data-open-editor="${editorKey}" type="button" title="${t("edit")}" aria-label="${t("edit")} ${escapeHtml(readableFileLabel(label))}">${icon("edit")}</button>` : "";
-      return `<div><div class="list-head"><h3>${escapeHtml(readableFileLabel(label))}</h3>${editButton}</div>${chips}</div>`;
+      return `<div class="project-sample" data-sample-label="${escapeHtml(label)}"><div class="list-head"><h3>${escapeHtml(readableFileLabel(label))}</h3>${editButton}</div>${chips}</div>`;
     })
     .join("");
 
   const projectIcon = project.key === "cloud" ? "cloud" : "update";
   const active = isActiveState(project.timer);
   const projectEvent = compactEvent("", project.lastEvent, project.lastLog);
-  const projectSubtitle = [project.activeName || "not configured", projectEvent]
+  const projectSubtitle = [localizedStatus(project.activeName || "not configured"), projectEvent]
     .filter((value) => value && value !== "unknown")
     .join(" - ");
   return `
@@ -297,7 +483,7 @@ function renderProject(project) {
             ${icon(projectIcon)}
           <div>
             <h2>${statusDot(project.timer)}${escapeHtml(project.title)}</h2>
-            <p class="event">${escapeHtml(projectSubtitle || "not configured")}</p>
+            <p class="event">${escapeHtml(projectSubtitle || t("notConfigured"))}</p>
           </div>
         </div>
         <div class="actions">
@@ -308,8 +494,8 @@ function renderProject(project) {
       </div>
       <div class="status-row">
         <div class="status-cell"><span>${t("timer")}</span><strong>${badge(project.timer)}</strong></div>
-        <div class="status-cell"><span>${t("table")}</span><strong>${escapeHtml(project.activeTable)}</strong></div>
-        <div class="status-cell"><span>${t("rules")}</span><strong>${escapeHtml(project.rules)}</strong></div>
+        <div class="status-cell"><span>${t("table")}</span><strong>${escapeHtml(localizedStatus(project.activeTable))}</strong></div>
+        <div class="status-cell"><span>${t("rules")}</span><strong>${escapeHtml(localizedStatus(project.rules))}</strong></div>
         <div class="status-cell"><span>${t("entries")}</span><strong>${escapeHtml(Object.values(project.counts || {}).join(" / ") || "0")}</strong></div>
       </div>
       <div class="list">${sampleHtml}</div>
@@ -324,6 +510,7 @@ function renderStatus(data) {
   if (rootPath) rootPath.textContent = `${address} - root ${data.root}`;
   renderConnections(data);
   $("#projects").innerHTML = data.projects.map(renderProject).join("");
+  requestAnimationFrame(syncProjectSampleHeights);
 
   $("#dnscryptTitle").innerHTML = `
       ${icon("dns")}
@@ -336,7 +523,7 @@ function renderStatus(data) {
   $("#dnscryptStatus").innerHTML = `
     <div><span>${t("timer")}</span><strong>${badge(data.dnscrypt.timer)}</strong></div>
     <div><span>${t("domains")}</span><strong>${escapeHtml(data.dnscrypt.domains)}</strong></div>
-    <div><span>${t("dnsRoute")}</span><strong>${escapeHtml(data.dnscrypt.route?.name || data.dnscrypt.route?.iface || "unknown")}</strong></div>
+    <div><span>${t("dnsRoute")}</span><strong>${escapeHtml(localizedStatus(data.dnscrypt.route?.name || data.dnscrypt.route?.iface || "unknown"))}</strong></div>
   `;
   $("#dnscryptDomains").innerHTML = (data.dnscrypt.samples || [])
     .map((value) => `<code>${escapeHtml(value)}</code>`)
@@ -356,7 +543,7 @@ function renderStatus(data) {
   `;
   $("#iconsList").innerHTML = (data.ispIcons.items || [])
     .map((item) => `<article class="isp-icon-item"><img src="${escapeHtml(item.url)}" alt=""><span>${escapeHtml(item.name)}</span></article>`)
-    .join("") || "<p>No icons</p>";
+    .join("") || `<p>${t("noIcons")}</p>`;
 
   const dnsActive = isActiveState(data.dnscrypt.service);
   setActionState("dnscrypt.start", dnsActive ? "state-ok" : "");
@@ -364,6 +551,18 @@ function renderStatus(data) {
   const iconsActive = Boolean(data.ispIcons.exists && Number(data.ispIcons.icons) > 0);
   setActionState("icons.install", iconsActive ? "state-ok" : "");
   setActionState("icons.uninstall", iconsActive ? "" : "state-bad");
+}
+
+function syncProjectSampleHeights() {
+  const samples = [...document.querySelectorAll("#projects .project-sample")];
+  samples.forEach((item) => { item.style.minHeight = ""; });
+  if (!window.matchMedia("(min-width: 681px)").matches) return;
+  const labels = [...new Set(samples.map((item) => item.dataset.sampleLabel))];
+  labels.forEach((label) => {
+    const matching = samples.filter((item) => item.dataset.sampleLabel === label);
+    const height = Math.max(...matching.map((item) => item.getBoundingClientRect().height));
+    matching.forEach((item) => { item.style.minHeight = `${Math.ceil(height)}px`; });
+  });
 }
 
 async function loadEditors() {
@@ -380,8 +579,10 @@ async function loadEditors() {
 
 async function checkAuth() {
   const me = await getJson("/api/auth/me");
+  state.me = me;
   const modal = $("#loginModal");
   modal.hidden = Boolean(me.authenticated);
+  applyBranding(me.logo);
   if (me.authenticated) {
     $("#avatarInitials").textContent = (me.name || me.username || "UR").slice(0, 2).toUpperCase();
     if (me.avatar) {
@@ -391,6 +592,14 @@ async function checkAuth() {
     }
   }
   return me.authenticated;
+}
+
+function applyBranding(logoUrl) {
+  const url = logoUrl || "/assets/brand/u-logo.svg";
+  $("#brandLogo").src = url;
+  const favicon = $("#favicon");
+  favicon.href = logoUrl || "/favicon.svg";
+  favicon.type = logoUrl?.includes(".jpg") ? "image/jpeg" : logoUrl ? "image/png" : "image/svg+xml";
 }
 
 async function refresh() {
@@ -405,15 +614,20 @@ async function refresh() {
 function openEditor(key) {
   state.editorKey = key;
   const item = state.files?.[key];
-  $("#editorTitle").textContent = editorLabels[key] || key;
+  $("#editorTitle").textContent = editorLabels[key] ? t(editorLabels[key]) : key;
   $("#editorPath").textContent = item?.path || "";
+  const description = key === "dnscrypt.domains" ? t("dnscryptGeneratedDescription") : item?.description || "";
+  $("#editorDescription").textContent = description;
+  $("#editorDescription").hidden = !description;
   $("#modalEditor").value = item?.content || "";
+  $("#modalEditor").readOnly = Boolean(item?.readOnly);
+  $("#saveModalEditor").hidden = Boolean(item?.readOnly);
   $("#editorModal").hidden = false;
 }
 
 function openDownload(kind) {
   state.downloadKind = kind;
-  $("#downloadTitle").textContent = kind === "country" ? "Add country flag" : "Add provider icon";
+  $("#downloadTitle").textContent = kind === "country" ? t("addCountryFlag") : t("addProviderIcon");
   $("#downloadUrl").value = "";
   $("#downloadName").value = "";
   $("#downloadModal").hidden = false;
@@ -422,7 +636,7 @@ function openDownload(kind) {
 async function loadLogs() {
   const target = $("#logTarget").value;
   const data = await getJson(`/api/logs?target=${encodeURIComponent(target)}&lines=160`);
-  $("#logBox").textContent = data.log || "No log entries.";
+  $("#logBox").textContent = data.log || t("noLogEntries");
 }
 
 function showToast(message) {
@@ -447,7 +661,7 @@ function renderLogToggle() {
   const button = $("#toggleLogs");
   const expanded = !$("#logBox").hidden;
   button.innerHTML = icon(expanded ? "chevronUp" : "chevronDown");
-  button.title = expanded ? "Collapse logs" : "Expand logs";
+  button.title = expanded ? t("collapseLogs") : t("expandLogs");
   button.setAttribute("aria-label", button.title);
 }
 
@@ -463,6 +677,7 @@ function enhanceButtons(force = false) {
     "icons.install": "play",
     "icons.discover": "refresh",
     "icons.uninstall": "stop",
+    "system.update": "update",
   };
   const actionLabels = {
     "cloud.start": t("start"),
@@ -478,6 +693,7 @@ function enhanceButtons(force = false) {
     "icons.install": t("start"),
     "icons.discover": t("update"),
     "icons.uninstall": t("stop"),
+    "system.update": t("updateProject"),
   };
 
   document.querySelectorAll("button[data-action]").forEach((button) => {
@@ -506,15 +722,33 @@ function enhanceButtons(force = false) {
 async function runAction(action) {
   if (state.busy) return;
   if (action === "dnscrypt.flush-cache" && !window.confirm(t("clearDnsCacheConfirm"))) return;
+  if (action === "system.update" && !window.confirm(t("updateProjectConfirm"))) return;
   state.busy = true;
-  showToast(`Running ${action}...`);
+  showToast(`${t("running")}: ${action}...`);
   try {
     const result = await getJson("/api/action", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action }),
     });
-    showToast(`${result.ok ? "Done" : "Failed"}: ${action}\n${result.output || ""}`.trim());
+    if (action === "system.update" && result.ok) {
+      showToast(t("updateStarted"));
+      await new Promise((resolve) => setTimeout(resolve, 8000));
+      for (let attempt = 0; attempt < 60; attempt += 1) {
+        try {
+          const me = await getJson("/api/auth/me", { cache: "no-store" });
+          if (me.authenticated) {
+            location.reload();
+            return;
+          }
+        } catch {
+          // The Web service is expected to be unavailable briefly.
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+      throw new Error(t("updateTimeout"));
+    }
+    showToast(`${result.ok ? t("done") : t("failed")}: ${action}\n${result.output || ""}`.trim());
     await refresh();
   } catch (error) {
     showToast(error.message);
@@ -531,7 +765,7 @@ async function saveEditor(key) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ key, content: editor.value }),
   });
-  showToast(`${result.ok ? "Saved" : "Failed"}: ${key}\n${result.output || ""}`.trim());
+  showToast(`${result.ok ? t("saved") : t("failed")}: ${key}\n${result.output || ""}`.trim());
   await refresh();
   $("#editorModal").hidden = true;
 }
@@ -554,7 +788,7 @@ async function downloadAsset() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ kind: state.downloadKind, url: $("#downloadUrl").value, filename: $("#downloadName").value }),
   });
-  showToast(`${result.ok ? "Uploaded" : "Failed"}\n${result.output || ""}`.trim());
+  showToast(`${result.ok ? t("uploaded") : t("failed")}\n${result.output || ""}`.trim());
   $("#downloadModal").hidden = true;
   await refresh();
 }
@@ -563,11 +797,11 @@ async function uploadAvatar() {
   const file = $("#avatarFile").files[0];
   if (!file) return;
   if (!["image/png", "image/jpeg"].includes(file.type)) {
-    showToast("Avatar must be PNG or JPG");
+    showToast(t("avatarTypeError"));
     return;
   }
   if (file.size > 512 * 1024) {
-    showToast("Avatar must be smaller than 512 KB");
+    showToast(t("avatarSizeError"));
     return;
   }
   try {
@@ -581,12 +815,65 @@ async function uploadAvatar() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ filename: file.name, data }),
     });
-    showToast(result.ok ? "Avatar updated" : result.output || "Failed");
+    showToast(result.ok ? t("avatarUpdated") : result.output || t("failed"));
+    $("#avatarFile").value = "";
+    $("#avatarFileName").textContent = t("noFileSelected");
     $("#profileModal").hidden = true;
     await checkAuth();
   } catch (error) {
-    showToast(error.message || "Avatar upload failed");
+    showToast(error.message || t("failed"));
   }
+}
+
+async function uploadBrandLogo(file) {
+  if (!file) return;
+  if (!["image/png", "image/jpeg"].includes(file.type)) {
+    showToast(t("logoTypeError"));
+    return;
+  }
+  if (file.size > 512 * 1024) {
+    showToast(t("logoSizeError"));
+    return;
+  }
+  try {
+    const data = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("Could not read the selected image"));
+      reader.readAsDataURL(file);
+    });
+    const result = await getJson("/api/auth/logo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data }),
+    });
+    applyBranding(result.logo);
+    showToast(t("logoUpdated"));
+  } catch (error) {
+    showToast(error.message || t("failed"));
+  } finally {
+    $("#brandLogoFile").value = "";
+  }
+}
+
+async function updateProfile() {
+  const username = $("#profileLogin").value.trim();
+  const currentPassword = $("#profileCurrentPassword").value;
+  const newPassword = $("#profileNewPassword").value;
+  const confirmPassword = $("#profileConfirmPassword").value;
+  if (newPassword !== confirmPassword) {
+    throw new Error(t("passwordMismatch"));
+  }
+  const result = await getJson("/api/auth/profile", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, currentPassword, newPassword }),
+  });
+  showToast(result.output || t("accountUpdated"));
+  $("#profileCurrentPassword").value = "";
+  $("#profileNewPassword").value = "";
+  $("#profileConfirmPassword").value = "";
+  await checkAuth();
 }
 
 document.addEventListener("click", (event) => {
@@ -610,9 +897,23 @@ $("#loginForm").addEventListener("submit", (event) => {
 $("#saveModalEditor").addEventListener("click", () => saveEditor(state.editorKey));
 $("#downloadBtn").addEventListener("click", downloadAsset);
 $("#avatarBtn").addEventListener("click", () => {
+  $("#profileLogin").value = state.me?.username || "";
+  $("#profileCurrentPassword").value = "";
+  $("#profileNewPassword").value = "";
+  $("#profileConfirmPassword").value = "";
   $("#profileModal").hidden = false;
 });
+$("#brandLogoBtn").addEventListener("click", () => $("#brandLogoFile").click());
+$("#brandLogoFile").addEventListener("change", () => uploadBrandLogo($("#brandLogoFile").files[0]));
+$("#chooseAvatar").addEventListener("click", () => $("#avatarFile").click());
+$("#avatarFile").addEventListener("change", () => {
+  $("#avatarFileName").textContent = $("#avatarFile").files[0]?.name || t("noFileSelected");
+});
 $("#uploadAvatar").addEventListener("click", uploadAvatar);
+$("#profileForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  updateProfile().catch((error) => showToast(error.message));
+});
 $("#logoutBtn").addEventListener("click", async () => {
   await getJson("/api/auth/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
   location.reload();
@@ -637,6 +938,11 @@ $("#toggleLogs").addEventListener("click", () => {
   const box = $("#logBox");
   box.hidden = !box.hidden;
   renderLogToggle();
+});
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(syncProjectSampleHeights, 100);
 });
 if (localStorage.getItem("theme") === "dark") document.body.classList.add("dark");
 state.lang = detectLanguage();

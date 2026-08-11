@@ -5,7 +5,7 @@ Local network web interface for the routing scripts in this project.
 ## Start
 
 ```sh
-cd /persistent
+cd /persistent/unifi-routing-manager
 python3 web/server.py
 ```
 
@@ -22,7 +22,7 @@ By default the server binds to `0.0.0.0`, so it is available from your local net
 Use a different data root while testing:
 
 ```sh
-UNIFI_ROUTING_ROOT=/Users/akininav/Desktop/persistant python3 web/server.py
+UNIFI_ROUTING_ROOT=/persistent/unifi-routing-manager python3 web/server.py
 ```
 
 Use a different local port:

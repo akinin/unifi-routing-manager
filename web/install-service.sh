@@ -3,7 +3,7 @@
 set -eu
 
 SERVICE="unifi-routing-web.service"
-PROJECT_ROOT="${UNIFI_ROUTING_ROOT:-/persistent}"
+PROJECT_ROOT="${UNIFI_ROUTING_ROOT:-/persistent/unifi-routing-manager}"
 WEB_HOST="${UNIFI_WEB_HOST:-0.0.0.0}"
 WEB_PORT="${UNIFI_WEB_PORT:-8090}"
 UNIT="/etc/systemd/system/$SERVICE"

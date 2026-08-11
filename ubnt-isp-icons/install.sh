@@ -64,8 +64,8 @@ fi
 log "Installing native ISP icons via /app-assets/network/react..."
 
 if ! ls "$SRC"/*_101x101.png >/dev/null 2>&1; then
-  log "ERROR: missing $SRC/*_101x101.png"
-  exit 1
+  log "No custom ISP icons configured; nothing to install."
+  exit 0
 fi
 
 mkdir -p "$ASN_DIR" "$ISP_DIR"
